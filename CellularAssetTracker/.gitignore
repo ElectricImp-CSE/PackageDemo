@@ -25,7 +25,6 @@
 # exclude Build API key file
 
 settings/
-src/agent/LosantAuth.agent.nut
 build/
 electric-imp.sublime-project
 electric-imp.sublime-workspace
