@@ -33,7 +33,6 @@ class LosantApp {
     agentId        = null;
 
     function __statics__() {
-        // @include "agent/LosantAuth.agent.nut";
         const LOSANT_DEVICE_API_TOKEN   = "@{LOSANT_DEVICE_API_TOKEN}";
         const LOSANT_FULL_APP_API_TOKEN = "@{LOSANT_FULL_APP_API_TOKEN}";
         const LOSANT_APPLICATION_ID     = "@{LOSANT_APPLICATION_ID}";
