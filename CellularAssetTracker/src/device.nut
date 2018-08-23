@@ -28,7 +28,7 @@
 // the hardware objects used in the application.
 
 // impC001-breakout HAL
-@include "device/Breakout_3_0.HAL.nut";
+@include "device/Breakout_4_2.HAL.nut";
 
 // GLOBAL VARIABLES AND CONSTANTS
 // ---------------------------------------------------

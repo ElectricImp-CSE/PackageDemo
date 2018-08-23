@@ -1,4 +1,11 @@
-@include "agent/LosantPackageDemo.agent.nut";
+// Agent/Device Coms
+#require "MessageManager.lib.nut:2.1.0"
+
+// Select which web service and include here. These files
+// include a library require statement and must be included
+// before any other code.
+// @include "agent/LosantPackageDemo.agent.nut";
+@include "agent/SalesforcePackageDemo.agent.nut";
 
 // TRACKER APPLICATION CLASS
 // ---------------------------------------------------

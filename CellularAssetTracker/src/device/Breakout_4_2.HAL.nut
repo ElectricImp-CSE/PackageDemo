@@ -21,7 +21,7 @@ HAL <- {
     "USB_EN"          : hardware.pinYM,
     "USB_LOAD_FLAG"   : hardware.pinYN,
 
-    "GROVE_I2C"       : hardware.i2cHJ,
+    "GROVE_I2C"       : hardware.i2cJH,
     "GROVE_D1"        : hardware.pinJ,
     "GROVE_D2"        : hardware.pinH,
     "GROVE_AD1"       : hardware.pinYP,
