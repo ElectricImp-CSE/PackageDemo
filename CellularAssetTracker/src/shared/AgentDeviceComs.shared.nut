@@ -23,6 +23,7 @@ const ALERTS                   = "a";
 const ALERT_TEMP               = "tAlert";
 const ALERT_HUMID              = "hAlert";
 const ALERT_MOVE               = "mAlert";
+const ALERT_LIGHT              = "lxAlert";
 const ALERT_TYPE               = "type";
 const ALERT_DESCRIPTION        = "description";
 const ALERT_TRIGGER            = "trigger";
@@ -42,5 +43,6 @@ enum ALERT_TYPE_ID {
     TEMP_LOW,
     HUMID_HIGH,
     HUMID_LOW,
-    MOVE
+    MOVE,
+    LIGHT
 }

@@ -97,11 +97,12 @@ class TrackerApplication {
         const READING_INTERVAL_SEC       = 30;
         const AGENT_DEV_SYNC_TIMEOUT_SEC = 5;
 
-        const TEMP_HIGH_ALERT           = "Temperature above threshold";
-        const TEMP_LOW_ALERT            = "Temperature below threshold";
-        const HUMID_HIGH_ALERT          = "Humidity above threshold";
-        const HUMID_LOW_ALERT           = "Humidity below threshold";
-        const MOVE_ALERT                = "Movement detected";
+        const TEMP_HIGH_ALERT            = "Temperature above threshold";
+        const TEMP_LOW_ALERT             = "Temperature below threshold";
+        const HUMID_HIGH_ALERT           = "Humidity above threshold";
+        const HUMID_LOW_ALERT            = "Humidity below threshold";
+        const MOVE_ALERT                 = "Movement detected";
+        const LIGHT_ALERT                = "Light level above threshold";
     }
 
     constructor(debug = false) {
@@ -226,9 +227,9 @@ class TrackerApplication {
                     } else if (!reading[DEV_STATE_HUMID_IN_RANGE] && (!(ALERT_HUMID in _alerts) || _alerts[ALERT_HUMID] != alertType)) {
                         // Temp is out of range and no alert for this condition has been issued, create alert
                         local alert = {};
-                        alert[ALERT_TYPE]       <- alertType;
-                        alert[ALERT_TRIGGER]    <- reading[READING_HUMID];
-                        alert[ALERT_CREATED]    <- reading[READING_TS];
+                        alert[ALERT_TYPE]        <- alertType;
+                        alert[ALERT_TRIGGER]     <- reading[READING_HUMID];
+                        alert[ALERT_CREATED]     <- reading[READING_TS];
                         alert[ALERT_DESCRIPTION] <- (alertType == ALERT_TYPE_ID.HUMID_HIGH) ? HUMID_HIGH_ALERT : HUMID_LOW_ALERT;
                         // Add alert to _alerts table
                         _alerts[ALERT_HUMID] <- alert;
@@ -241,6 +242,24 @@ class TrackerApplication {
                 if ("lxLevel" in results[1] && "isLight" in results[1]) {
                     reading[READING_LX] <- results[1].lxLevel;
                     reading[DEV_STATE_IS_LIGHT] <- results[1].isLight;
+
+                    if (reading[DEV_STATE_IS_LIGHT] && !(LIGHT_ALERT in _alerts)) {
+                        // If light is above threshold trigger alert
+                        local alert = {};
+                        alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LIGHT;
+                        alert[ALERT_TRIGGER]     <- reading[READING_LX];
+                        alert[ALERT_CREATED]     <- reading[READING_TS];
+                        alert[ALERT_DESCRIPTION] <- LIGHT_ALERT;
+                        // Add alert to _alerts table
+                        _alerts[ALERT_LIGHT] <- alert;
+                        // Set connect flag to update stage change
+                        alertUpdate = true;
+                    } else if (!reading[DEV_STATE_IS_LIGHT] && (ALERT_LIGHT in _alerts)) {
+                        // Clear light alert
+                        _alerts[ALERT_LIGHT][ALERT_RESOLVED] <- reading[READING_TS];
+                        alertUpdate = true;
+                    }
+
                 }
 
                 // Add accelerometer data
@@ -261,7 +280,6 @@ class TrackerApplication {
                     } else if (!isMoving && ALERT_MOVE in _alerts) {
                         // Clear a movement alert
                         _alerts[ALERT_MOVE][ALERT_RESOLVED] <- reading[READING_TS];
-                        alertUpdate = true;
                     }
                 } else if (results[2] != null) {
                     // Update state with values from reading
