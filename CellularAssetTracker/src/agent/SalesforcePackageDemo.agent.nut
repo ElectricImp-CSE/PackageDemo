@@ -1,134 +1,70 @@
-// Utility Libraries
-#require "Rocky.class.nut:1.2.3"
 // Web Integration Library
 #require "Salesforce.agent.lib.nut:2.0.0"
 
 // Extends Salesforce Library to handle authorization
-class SalesforceOAuth2 extends Salesforce {
+class SalesforceSoapLogin extends Salesforce {
 
-    _login = null;
+    // Note we do not get back a userUrl, so getUser function will not work!!!
 
-    constructor(consumerKey, consumerSecret, loginServiceBase = null, salesforceVersion = null) {
-        _clientId = consumerKey;
-        _clientSecret = consumerSecret;
+    _loginService = "/services/Soap/u/43.0";
+    _version  = "v43.0";
+    _restPath = "/services/apexrest";
 
-        if ("Rocky" in getroottable()) {
-            _login = Rocky();
-        } else {
-            throw "Unmet dependency: SalesforceOAuth2 requires Rocky";
-        }
+    function login(username, password, securityToken, cb = null) {
 
-        if (loginServiceBase != null) _loginServiceBase = loginServiceBase;
-        if (salesforceVersion != null) _version = salesforceVersion;
-
-        // Helper so don't have to log in all the time, however if
-        // credentials get old they will need to be erased.
-        getStoredCredentials();
-        defineLoginEndpoint();
-    }
-
-    function getStoredCredentials() {
-        local persist = server.load();
-        local oAuth = {};
-        if ("oAuth" in persist) oAuth = persist.oAuth;
-
-        // Load credentials if we have them
-        if ("instance_url" in oAuth && "access_token" in oAuth) {
-            // Set the credentials in the Salesforce object
-            setInstanceUrl(oAuth.instance_url);
-            setToken(oAuth.access_token);
-
-            // Log a message
-            server.log("Loaded OAuth Credentials!");
-        }
-    }
-
-    function defineLoginEndpoint() {
-        // Define log in endpoint for a GET request to the agent URL
-        _login.get("/", function(context) {
-
-            // Check if an OAuth code was passed in
-            if (!("code" in context.req.query)) {
-                // If it wasn't, redirect to login service
-                local location = format(
-                    "%s/services/oauth2/authorize?response_type=code&client_id=%s&redirect_uri=%s",
-                    _loginServiceBase,
-                    _clientId, http.agenturl());
-                context.setHeader("Location", location);
-                context.send(302, "Found");
-
-                return;
-            }
-
-            // Exchange the auth code for inan OAuth token
-            getOAuthToken(context.req.query["code"], function(err, resp, respData) {
-                if (err) {
-                    context.send(400, "Error authenticating (" + err + ").");
-                    return;
-                }
-
-                // If it was successful, save the data locally
-                local persist = { "oAuth" : respData };
-                server.save(persist);
-
-                // Set/update the credentials in the Salesforce object
-                setInstanceUrl(persist.oAuth.instance_url);
-                setToken(persist.oAuth.access_token);
-
-                // Finally - inform the user we're done!
-                context.send(200, "Authentication complete - you may now close this window");
-            }.bindenv(this));
-        }.bindenv(this));
-    }
-
-    // OAuth 2.0 methods
-    function getOAuthToken(code, cb) {
-        // Send request with an authorization code
-        _oauthTokenRequest("authorization_code", code, cb);
-    }
-
-    function refreshOAuthToken(refreshToken, cb) {
-        // Send request with refresh token
-        _oauthTokenRequest("refresh_token", refreshToken, cb);
-    }
-
-    function _oauthTokenRequest(type, tokenCode, cb = null) {
-        // Build the request
-        local url = format("%s/services/oauth2/token", _loginServiceBase);
-        local headers = { "Content-Type": "application/x-www-form-urlencoded" };
-        local data = {
-            "grant_type": type,
-            "client_id": _clientId,
-            "client_secret": _clientSecret,
+        local url = format("%s%s", _loginServiceBase, _loginService);
+        local headers = {
+            "Content-Type" : "text/xml",
+            "SOAPAction" : "Required"
         };
+        local body = "<se:Envelope xmlns:se=\"http://schemas.xmlsoap.org/soap/envelope/\">\n    <se:Header/>\n    <se:Body>\n        <login xmlns=\"urn:partner.soap.sforce.com\">\n            <username>"+username+"</username>\n            <password>"+password+""+securityToken+"</password>\n        </login>\n    </se:Body>\n</se:Envelope>";
 
-        // Set the "code" or "refresh_token" parameters based on grant_type
-        if (type == "authorization_code") {
-            data.code <- tokenCode;
-            data.redirect_uri <- http.agenturl();
-        } else if (type == "refresh_token") {
-            data.refresh_token <- tokenCode;
-        } else {
-            throw "Unknown grant_type";
-        }
-
-        local body = http.urlencode(data);
-
-        http.post(url, headers, body).sendasync(function(resp) {
-            local respData = http.jsondecode(resp.body);
-            local err = null;
-
-            // If there was an error, set the error code
-            if (resp.statuscode != 200) err = data.message;
-
-            // Invoke the callback
-            if (cb) {
-                imp.wakeup(0, function() {
-                    cb(err, resp, respData);
-                });
-            }
-        });
+        local request = http.post(url, headers, body);
+        request.sendasync(_loginRespFactory(cb))
     }
+
+    function _loginRespFactory(cb) {
+        return function(resp) {
+            local body = resp.body;
+            local err = null;
+            local data = resp;
+
+            if (resp.statuscode == 200) {
+                try {
+                    // Session id
+                    _token = _parseXML(body, "<sessionId>", "</sessionId>");
+                    // Full serverUrl
+                    _instanceUrl = _parseXML(body, "<serverUrl>", "</serverUrl>");
+                    // Parse to get the base serverUrl
+                    local end = _instanceUrl.find(_loginService);
+                    _instanceUrl = _instanceUrl.slice(0, end);
+                } catch(e) {
+                    err = "Login request parsing error " + e;
+                }
+            } else {
+                err = "Login request failed";
+            }
+
+            if (cb != null) {
+                cb(err, data);
+            } else if (err != null) {
+                throw err;
+            }
+        }.bindenv(this)
+    }
+
+    function _parseXML(data, startTag, endTag) {
+        try {
+            local start = data.find(startTag);
+            local end = data.find(endTag);
+            if (start == null || end == null) throw "XML Tag not found";
+
+            return data.slice((start + startTag.len()), end);
+        } catch(e) {
+            throw e;
+        }
+    }
+
 }
 
 // GLOBAL VARIABLES AND CONSTANTS
@@ -156,35 +92,30 @@ class SalesforceApp {
     agentId        = null;
 
     function __statics__() {
-        const CONSUMER_KEY = "@{SALESFORCE_CONSUMER_KEY}";
-        const CONSUMER_SECRET = "@{SALESFORCE_CONSUMER_SECRET}";
-        const EVENT_NAME = "Container__e";
-
-        // URLS from postman???
-        // Post data to url: https://gs0.salesforce.com/services/data/v43.0/sobjects/Container__e
-        // Create asset url: https://gs0.salesforce.com/services/data/v43.0/sobjects/Asset
+        // const CONSUMER_KEY = "@{SALESFORCE_CONSUMER_KEY}";
+        // const CONSUMER_SECRET = "@{SALESFORCE_CONSUMER_SECRET}";
+        const USERNAME    = "@{SALESFORCE_USERNAME}";
+        const PASSWORD    = "@{SALESFORCE_PASSWORD}";
+        const LOGIN_TOKEN = "@{SALESFORCE_LOGIN_TOKEN}";
+        const EVENT_NAME  = "Container__e";
 
         @include "agent/AgentSalesforceComs.agent.nut";
     }
 
-    constructor(_topicListener, clearLoginCreds = false) {
+    constructor(_topicListener) {
         agentId = split(http.agenturl(), "/").top();
         impDeviceId = imp.configparams.deviceid;
 
         sendUrl = format("sobjects/%s/", EVENT_NAME);
-        force = SalesforceOAuth2(CONSUMER_KEY, CONSUMER_SECRET, null, "v43.0");
+        force = SalesforceSoapLogin(null, null);
         topicListener = _topicListener;
 
-        if (clearLoginCreds) {
-            local persist = server.load();
-            if ("oAuth" in persist) persist.oAuth = {};
-            server.save(persist);
-        }
+        force.login(USERNAME, PASSWORD, LOGIN_TOKEN, function(err, resp) {
+            if (err != null) server.error(err);
+        });
 
         // TODO:
-        // Are we logged in?? (Notify user if we don't have token??)
         // Open listeners for incomming messages (BayeuxClient??)
-
     }
 
     function sendData(data) {
@@ -199,7 +130,7 @@ class SalesforceApp {
         body[EVENT_NAME_DEVICE_ID] <- impDeviceId;
 
         // Only send the most recent reading to Salesforce
-        local last = data.pop();
+        local last = data.r.pop();
         if (READING_LAT in last)   body[EVENT_NAME_LAT]      <- last[READING_LAT];
         if (READING_LNG in last)   body[EVENT_NAME_LNG]      <- last[READING_LNG];
         if (READING_TEMP in last)  body[EVENT_NAME_TEMP]     <- last[READING_TEMP];
