@@ -97,12 +97,12 @@ class TrackerApplication {
         const READING_INTERVAL_SEC       = 30;
         const AGENT_DEV_SYNC_TIMEOUT_SEC = 5;
 
-        const TEMP_HIGH_ALERT            = "Temperature above threshold";
-        const TEMP_LOW_ALERT             = "Temperature below threshold";
-        const HUMID_HIGH_ALERT           = "Humidity above threshold";
-        const HUMID_LOW_ALERT            = "Humidity below threshold";
-        const MOVE_ALERT                 = "Movement detected";
-        const LIGHT_ALERT                = "Light level above threshold";
+        const TEMP_HIGH_ALERT_DESC            = "Temperature above threshold";
+        const TEMP_LOW_ALERT_DESC             = "Temperature below threshold";
+        const HUMID_HIGH_ALERT_DESC           = "Humidity above threshold";
+        const HUMID_LOW_ALERT_DESC            = "Humidity below threshold";
+        const MOVE_ALERT_DESC                 = "Movement detected";
+        const LIGHT_ALERT_DESC                = "Light level above threshold";
     }
 
     constructor(debug = false) {
@@ -203,7 +203,7 @@ class TrackerApplication {
                         alert[ALERT_TYPE]        <- alertType;
                         alert[ALERT_TRIGGER]     <- reading[READING_TEMP];
                         alert[ALERT_CREATED]     <- reading[READING_TS];
-                        alert[ALERT_DESCRIPTION] <- (alertType == ALERT_TYPE_ID.TEMP_HIGH) ? TEMP_HIGH_ALERT : TEMP_LOW_ALERT;
+                        alert[ALERT_DESCRIPTION] <- (alertType == ALERT_TYPE_ID.TEMP_HIGH) ? TEMP_HIGH_ALERT_DESC : TEMP_LOW_ALERT_DESC;
                         // Add alert to _alerts table
                         _alerts[ALERT_TEMP]  <- alert;
                         // Set connect flag to update stage change
@@ -230,7 +230,7 @@ class TrackerApplication {
                         alert[ALERT_TYPE]        <- alertType;
                         alert[ALERT_TRIGGER]     <- reading[READING_HUMID];
                         alert[ALERT_CREATED]     <- reading[READING_TS];
-                        alert[ALERT_DESCRIPTION] <- (alertType == ALERT_TYPE_ID.HUMID_HIGH) ? HUMID_HIGH_ALERT : HUMID_LOW_ALERT;
+                        alert[ALERT_DESCRIPTION] <- (alertType == ALERT_TYPE_ID.HUMID_HIGH) ? HUMID_HIGH_ALERT_DESC : HUMID_LOW_ALERT_DESC;
                         // Add alert to _alerts table
                         _alerts[ALERT_HUMID] <- alert;
                         // Set connect flag to update stage change
@@ -243,13 +243,13 @@ class TrackerApplication {
                     reading[READING_LX] <- results[1].lxLevel;
                     reading[DEV_STATE_IS_LIGHT] <- results[1].isLight;
 
-                    if (reading[DEV_STATE_IS_LIGHT] && !(LIGHT_ALERT in _alerts)) {
+                    if (reading[DEV_STATE_IS_LIGHT] && !(ALERT_LIGHT in _alerts)) {
                         // If light is above threshold trigger alert
                         local alert = {};
                         alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LIGHT;
                         alert[ALERT_TRIGGER]     <- reading[READING_LX];
                         alert[ALERT_CREATED]     <- reading[READING_TS];
-                        alert[ALERT_DESCRIPTION] <- LIGHT_ALERT;
+                        alert[ALERT_DESCRIPTION] <- LIGHT_ALERT_DESC;
                         // Add alert to _alerts table
                         _alerts[ALERT_LIGHT] <- alert;
                         // Set connect flag to update stage change
@@ -275,7 +275,7 @@ class TrackerApplication {
                         alert[ALERT_TYPE]        <- ALERT_TYPE_ID.MOVE;
                         alert[ALERT_TRIGGER]     <- magnitude;
                         alert[ALERT_CREATED]     <- reading[READING_TS];
-                        alert[ALERT_DESCRIPTION] <- MOVE_ALERT;
+                        alert[ALERT_DESCRIPTION] <- MOVE_ALERT_DESC;
                         _alerts[ALERT_MOVE]      <- alert;
                     } else if (!isMoving && ALERT_MOVE in _alerts) {
                         // Clear a movement alert
