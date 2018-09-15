@@ -1,9 +1,15 @@
 class LocationMonitor {
 
-    _gps        = null;
-    _lastLat    = null;
-    _lastLng    = null;
-    _locChecked = null;
+    _gps          = null;
+
+    _lastLat      = null;
+    _lastLng      = null;
+    _locCheckedAt = null;
+
+    _geofenceCB   = null;
+    _gfCtr        = null;
+    _distFromCtr  = null;
+    _inBounds     = null;
 
     constructor(configurePixHawk) {
         // Configure class constants
@@ -35,7 +41,7 @@ class LocationMonitor {
     }
 
     function getLocation() {
-        return {"lat" : _lastLat, "lng" : _lastLng, "ts" : _locChecked};
+        return {"lat" : _lastLat, "lng" : _lastLng, "ts" : _locCheckedAt};
     }
 
     function gpsHandler(hasLoc, data) {
@@ -51,11 +57,43 @@ class LocationMonitor {
                 _lastLng = lng;
             }
             // Update location received timestamp
-            _locChecked = time();
+            _locCheckedAt = time();
+
+            if ("sentenceId" in data && data.sentenceId == GPS_PARSER_GGA) {
+                calculateDistance(data);
+            }
+
         } else if (!_gps.hasFix() && "numSatellites" in data) {
             // This will log a ton - use to debug only, not in application
             // server.log("GSV data received. Satellites: " + data.numSatellites);
         }
+    }
+
+    function inBounds() {
+        return _inBounds;
+    }
+
+    function enableGeofence(distance, ctrLat, ctrLng, cb) {
+        _distFromCtr = distance;
+        _geofenceCB = cb;
+
+        // use a hardcoded altitude, 30 meters
+        local alt = 30.00;
+        try {
+            local lat = ctrLat.tofloat();
+            local lng = ctrLng.tofloat();
+            _gfCtr = _getCartesianCoods(lat, lng, alt);
+        } catch(e) {
+            server.error("Error configuring geofence coordinates: " + e);
+        }
+
+    }
+
+    function disableGeofence() {
+        _geofenceCB = null;
+        _gfCtr = null;
+        _distFromCtr = null;
+        _inBounds = null;
     }
 
     // Use location threshold to filter out noise when not moving
@@ -71,6 +109,44 @@ class LocationMonitor {
             if (lngDiff > LOC_THRESHOLD) changed = true;
         }
         return changed;
+    }
+
+    function calculateDistance(data) {
+        // Only calculate if we have altitude, latitude and longitude
+        if (!("altitude" in data) || !("latitude" in data) || !("longitude" in data)) return;
+
+        try {
+            local lat = data.latitude.tofloat();
+            local lng = data.longitude.tofloat();
+            local alt = data.altitude.tofloat();
+
+            local new  = _getCartesianCoods(lat, lng, alt);
+            local dist = math.sqrt((new.x - _gfCtr.x)*(new.x - _gfCtr.x) + (new.y - _gfCtr.y)*(new.y - _gfCtr.y) + (new.z - _gfCtr.z)*(new.z - _gfCtr.z));
+
+            // server.log("New distance: " + dist + " M");
+            local inBounds = (dist <= _distFromCtr);
+            if (_geofenceCB != null && inBounds != _inBounds) {
+                _geofenceCB(inBounds);
+            }
+            // Track previous state, so we only trigger callback on a change
+            _inBounds = inBounds;
+        } catch (e) {
+            // Couldn't calculate
+            server.error("Error calculating distance: " + e);
+        }
+    }
+
+    function _getCartesianCoods(lat, lng, alt) {
+        local latRad = lat * PI / 180;
+        local lngRad = lng * PI / 180;
+        local cosLat = math.cos(latRad);
+        local result = {};
+
+        result.x <- alt * cosLat * math.sin(lngRad);
+        result.y <- alt * math.sin(latRad);
+        result.z <- alt * cosLat * math.cos(lngRad);
+
+        return result;
     }
 
     function _sendPixhawkConfigCommand(uart, baudrate) {

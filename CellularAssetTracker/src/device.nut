@@ -93,8 +93,11 @@ class TrackerApplication {
 
     // Configure class constants
     function _statics_() {
-        const DEFAULT_REPORTING_INT_SEC  = 900;
+        // Send data to SF every 3 min
+        const DEFAULT_REPORTING_INT_SEC  = 180;
+        // Take readings every 30 sec
         const READING_INTERVAL_SEC       = 30;
+        // On reboot, give agent time send stored settings
         const AGENT_DEV_SYNC_TIMEOUT_SEC = 5;
 
         const TEMP_HIGH_ALERT_DESC            = "Temperature above threshold";
@@ -103,6 +106,7 @@ class TrackerApplication {
         const HUMID_LOW_ALERT_DESC            = "Humidity below threshold";
         const MOVE_ALERT_DESC                 = "Movement detected";
         const LIGHT_ALERT_DESC                = "Light level above threshold";
+        const LOCATION_ALERT_DESC             = "Device crossed geofence boundry";
     }
 
     constructor(debug = false) {
@@ -145,6 +149,14 @@ class TrackerApplication {
         _moveMon.setMovementHandler(movementHanlder.bindenv(this));
         // TODO: Replace movement checker with configure interrupt to conserve power
         _moveMon.startMovementChecker();
+        // Enable geofencing half-a-mile~ish from stubed location
+        _locMon.enableGeofence(STUB_LOC_LAT, STUB_LOC_LNG, 800, geofenceAlertHandler.bindenv(this))
+    }
+
+    function geofenceAlertHandler(inBounds) {
+        // Change in
+        log("Geofence handler triggered...");
+        takeReadings(null, null, inBounds);
     }
 
     function movementHanlder(isMoving, magnitude = null) {
@@ -152,7 +164,7 @@ class TrackerApplication {
         takeReadings(isMoving, magnitude);
     }
 
-    function takeReadings(isMoving = null, magnitude = null) {
+    function takeReadings(isMoving = null, magnitude = null, inBounds = null) {
         // Make sure only one reading timer is running
         if (_readingTimer != null) {
             imp.cancelwakeup(_readingTimer);
@@ -243,22 +255,23 @@ class TrackerApplication {
                     reading[READING_LX] <- results[1].lxLevel;
                     reading[DEV_STATE_IS_LIGHT] <- results[1].isLight;
 
-                    if (reading[DEV_STATE_IS_LIGHT] && !(ALERT_LIGHT in _alerts)) {
-                        // If light is above threshold trigger alert
-                        local alert = {};
-                        alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LIGHT;
-                        alert[ALERT_TRIGGER]     <- reading[READING_LX];
-                        alert[ALERT_CREATED]     <- reading[READING_TS];
-                        alert[ALERT_DESCRIPTION] <- LIGHT_ALERT_DESC;
-                        // Add alert to _alerts table
-                        _alerts[ALERT_LIGHT] <- alert;
-                        // Set connect flag to update stage change
-                        alertUpdate = true;
-                    } else if (!reading[DEV_STATE_IS_LIGHT] && (ALERT_LIGHT in _alerts)) {
-                        // Clear light alert
-                        _alerts[ALERT_LIGHT][ALERT_RESOLVED] <- reading[READING_TS];
-                        alertUpdate = true;
-                    }
+                    // // Uncomment to report light level alerts
+                    // if (reading[DEV_STATE_IS_LIGHT] && !(ALERT_LIGHT in _alerts)) {
+                    //     // If light is above threshold trigger alert
+                    //     local alert = {};
+                    //     alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LIGHT;
+                    //     alert[ALERT_TRIGGER]     <- reading[READING_LX];
+                    //     alert[ALERT_CREATED]     <- reading[READING_TS];
+                    //     alert[ALERT_DESCRIPTION] <- LIGHT_ALERT_DESC;
+                    //     // Add alert to _alerts table
+                    //     _alerts[ALERT_LIGHT] <- alert;
+                    //     // Set connect flag to update stage change
+                    //     alertUpdate = true;
+                    // } else if (!reading[DEV_STATE_IS_LIGHT] && (ALERT_LIGHT in _alerts)) {
+                    //     // Clear light alert
+                    //     _alerts[ALERT_LIGHT][ALERT_RESOLVED] <- reading[READING_TS];
+                    //     alertUpdate = true;
+                    // }
 
                 }
 
@@ -267,24 +280,53 @@ class TrackerApplication {
                     // Movement callback was called, update device state and force connection
                     reading[READING_MAG] <- magnitude;
                     reading[DEV_STATE_IS_MOVING] <- isMoving;
-                    alertUpdate = true;
 
-                    // Update alert table
-                    if (isMoving && !(ALERT_MOVE in _alerts)) {
-                        local alert = {};
-                        alert[ALERT_TYPE]        <- ALERT_TYPE_ID.MOVE;
-                        alert[ALERT_TRIGGER]     <- magnitude;
-                        alert[ALERT_CREATED]     <- reading[READING_TS];
-                        alert[ALERT_DESCRIPTION] <- MOVE_ALERT_DESC;
-                        _alerts[ALERT_MOVE]      <- alert;
-                    } else if (!isMoving && ALERT_MOVE in _alerts) {
-                        // Clear a movement alert
-                        _alerts[ALERT_MOVE][ALERT_RESOLVED] <- reading[READING_TS];
-                    }
+                    // // Uncomment to report movement alerts
+                    // alertUpdate = true;
+                    // // Update alert table
+                    // if (isMoving && !(ALERT_MOVE in _alerts)) {
+                    //     local alert = {};
+                    //     alert[ALERT_TYPE]        <- ALERT_TYPE_ID.MOVE;
+                    //     alert[ALERT_TRIGGER]     <- magnitude;
+                    //     alert[ALERT_CREATED]     <- reading[READING_TS];
+                    //     alert[ALERT_DESCRIPTION] <- MOVE_ALERT_DESC;
+                    //     _alerts[ALERT_MOVE]      <- alert;
+                    // } else if (!isMoving && ALERT_MOVE in _alerts) {
+                    //     // Clear a movement alert
+                    //     _alerts[ALERT_MOVE][ALERT_RESOLVED] <- reading[READING_TS];
+                    // }
+
                 } else if (results[2] != null) {
                     // Update state with values from reading
                     reading[READING_MAG] <- results[2].magnitude;
                     reading[DEV_STATE_IS_MOVING] <- results[2].isMoving;
+                }
+
+                if (inBounds != null) {
+                    // Add location info to readings
+                    reading[DEV_STATE_IS_IN_BOUNDS] <- inBounds;
+
+                    // Create alert
+                    alertUpdate = true;
+                    // Update alert table
+                    if (inBounds && !(ALERT_LOCATION in _alerts)) {
+                        local alert = {};
+                        alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LOCATION;
+                        alert[ALERT_TRIGGER]     <- inBounds;
+                        alert[ALERT_CREATED]     <- reading[READING_TS];
+                        alert[ALERT_DESCRIPTION] <- LOCATION_ALERT_DESC;
+                        _alerts[ALERT_LOCATION]  <- alert;
+                    } else if (!inBounds && ALERT_LOCATION in _alerts) {
+                        // Clear a movement alert
+                        _alerts[ALERT_LOCATION][ALERT_RESOLVED] <- reading[READING_TS];
+                    }
+
+                } else {
+                    // Add location info to readings
+                    local inBounds = _locMon.inBounds();
+                    if (inBounds != null) {
+                        reading[DEV_STATE_IS_IN_BOUNDS] <- _locMon.inBounds;
+                    }
                 }
 
                 // Store data

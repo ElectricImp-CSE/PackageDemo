@@ -128,6 +128,7 @@ class SalesforceApp {
 
         local body = {};
         body[EVENT_NAME_DEVICE_ID] <- impDeviceId;
+        body[EVENT_NAME_ASSET_ID]  <- impDeviceId;
 
         // Only send the most recent reading to Salesforce
         local last = data.r.pop();

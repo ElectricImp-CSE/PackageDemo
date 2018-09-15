@@ -18,12 +18,14 @@ const DEV_STATE_IS_LIGHT       = "isLight";
 const DEV_STATE_TEMP_IN_RANGE  = "tInRange";
 const DEV_STATE_HUMID_IN_RANGE = "hInRange";
 const DEV_STATE_IS_MOVING      = "isMoving";
+const DEV_STATE_IS_IN_BOUNDS   = "isInBounds";
 // Alerts table
 const ALERTS                   = "a";
 const ALERT_TEMP               = "tAlert";
 const ALERT_HUMID              = "hAlert";
 const ALERT_MOVE               = "mAlert";
 const ALERT_LIGHT              = "lxAlert";
+const ALERT_LOCATION           = "locAlert";
 const ALERT_TYPE               = "type";
 const ALERT_DESCRIPTION        = "description";
 const ALERT_TRIGGER            = "trigger";
@@ -44,5 +46,6 @@ enum ALERT_TYPE_ID {
     HUMID_HIGH,
     HUMID_LOW,
     MOVE,
-    LIGHT
+    LIGHT,
+    LOCATION
 }

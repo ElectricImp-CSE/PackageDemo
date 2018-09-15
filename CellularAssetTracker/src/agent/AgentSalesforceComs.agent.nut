@@ -2,6 +2,7 @@
 
 // Device State Data Names
 const EVENT_NAME_DEVICE_ID = "Device_Id__c";
+const EVENT_NAME_ASSET_ID  = "Asset_Id__c";
 const EVENT_NAME_LAT       = "Latitude__c";
 const EVENT_NAME_LNG       = "Longitude__c"
 const EVENT_NAME_TEMP      = "Temperature__c";
