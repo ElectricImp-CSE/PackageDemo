@@ -4,8 +4,7 @@
 // Select which web service and include here. These files
 // include a library require statement and must be included
 // before any other code.
-// @include "agent/LosantPackageDemo.agent.nut";
-@include "agent/SalesforcePackageDemo.agent.nut";
+@include "agent/LosantPackageDemo.agent.nut";
 
 // TRACKER APPLICATION CLASS
 // ---------------------------------------------------
