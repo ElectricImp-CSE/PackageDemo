@@ -337,8 +337,8 @@ class LosantApp {
     }
 }
 
-// Assign LosantApp class to Webservice variable
-// Allows base tracker application to be re-used
-// for different web services
-local root = getroottable();
-WebService <- root.LosantApp;
+// // Assign LosantApp class to Webservice variable
+// // Allows base tracker application to be re-used
+// // for different web services
+// local root = getroottable();
+// WebService <- root.LosantApp;

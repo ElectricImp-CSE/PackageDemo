@@ -255,23 +255,23 @@ class TrackerApplication {
                     reading[READING_LX] <- results[1].lxLevel;
                     reading[DEV_STATE_IS_LIGHT] <- results[1].isLight;
 
-                    // // Uncomment to report light level alerts
-                    // if (reading[DEV_STATE_IS_LIGHT] && !(ALERT_LIGHT in _alerts)) {
-                    //     // If light is above threshold trigger alert
-                    //     local alert = {};
-                    //     alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LIGHT;
-                    //     alert[ALERT_TRIGGER]     <- reading[READING_LX];
-                    //     alert[ALERT_CREATED]     <- reading[READING_TS];
-                    //     alert[ALERT_DESCRIPTION] <- LIGHT_ALERT_DESC;
-                    //     // Add alert to _alerts table
-                    //     _alerts[ALERT_LIGHT] <- alert;
-                    //     // Set connect flag to update stage change
-                    //     alertUpdate = true;
-                    // } else if (!reading[DEV_STATE_IS_LIGHT] && (ALERT_LIGHT in _alerts)) {
-                    //     // Clear light alert
-                    //     _alerts[ALERT_LIGHT][ALERT_RESOLVED] <- reading[READING_TS];
-                    //     alertUpdate = true;
-                    // }
+                    // Report light level alerts
+                    if (reading[DEV_STATE_IS_LIGHT] && !(ALERT_LIGHT in _alerts)) {
+                        // If light is above threshold trigger alert
+                        local alert = {};
+                        alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LIGHT;
+                        alert[ALERT_TRIGGER]     <- reading[READING_LX];
+                        alert[ALERT_CREATED]     <- reading[READING_TS];
+                        alert[ALERT_DESCRIPTION] <- LIGHT_ALERT_DESC;
+                        // Add alert to _alerts table
+                        _alerts[ALERT_LIGHT] <- alert;
+                        // Set connect flag to update stage change
+                        alertUpdate = true;
+                    } else if (!reading[DEV_STATE_IS_LIGHT] && (ALERT_LIGHT in _alerts)) {
+                        // Clear light alert
+                        _alerts[ALERT_LIGHT][ALERT_RESOLVED] <- reading[READING_TS];
+                        alertUpdate = true;
+                    }
 
                 }
 
@@ -281,20 +281,20 @@ class TrackerApplication {
                     reading[READING_MAG] <- magnitude;
                     reading[DEV_STATE_IS_MOVING] <- isMoving;
 
-                    // // Uncomment to report movement alerts
-                    // alertUpdate = true;
-                    // // Update alert table
-                    // if (isMoving && !(ALERT_MOVE in _alerts)) {
-                    //     local alert = {};
-                    //     alert[ALERT_TYPE]        <- ALERT_TYPE_ID.MOVE;
-                    //     alert[ALERT_TRIGGER]     <- magnitude;
-                    //     alert[ALERT_CREATED]     <- reading[READING_TS];
-                    //     alert[ALERT_DESCRIPTION] <- MOVE_ALERT_DESC;
-                    //     _alerts[ALERT_MOVE]      <- alert;
-                    // } else if (!isMoving && ALERT_MOVE in _alerts) {
-                    //     // Clear a movement alert
-                    //     _alerts[ALERT_MOVE][ALERT_RESOLVED] <- reading[READING_TS];
-                    // }
+                    // Report movement alerts
+                    alertUpdate = true;
+                    // Update alert table
+                    if (isMoving && !(ALERT_MOVE in _alerts)) {
+                        local alert = {};
+                        alert[ALERT_TYPE]        <- ALERT_TYPE_ID.MOVE;
+                        alert[ALERT_TRIGGER]     <- magnitude;
+                        alert[ALERT_CREATED]     <- reading[READING_TS];
+                        alert[ALERT_DESCRIPTION] <- MOVE_ALERT_DESC;
+                        _alerts[ALERT_MOVE]      <- alert;
+                    } else if (!isMoving && ALERT_MOVE in _alerts) {
+                        // Clear a movement alert
+                        _alerts[ALERT_MOVE][ALERT_RESOLVED] <- reading[READING_TS];
+                    }
 
                 } else if (results[2] != null) {
                     // Update state with values from reading
