@@ -255,7 +255,7 @@ class TrackerApplication {
                     reading[READING_LX] <- results[1].lxLevel;
                     reading[DEV_STATE_IS_LIGHT] <- results[1].isLight;
 
-                    // // Uncomment to report light level alerts
+                    // // Report light level alerts
                     // if (reading[DEV_STATE_IS_LIGHT] && !(ALERT_LIGHT in _alerts)) {
                     //     // If light is above threshold trigger alert
                     //     local alert = {};
@@ -281,7 +281,7 @@ class TrackerApplication {
                     reading[READING_MAG] <- magnitude;
                     reading[DEV_STATE_IS_MOVING] <- isMoving;
 
-                    // // Uncomment to report movement alerts
+                    // // Report movement alerts
                     // alertUpdate = true;
                     // // Update alert table
                     // if (isMoving && !(ALERT_MOVE in _alerts)) {
