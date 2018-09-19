@@ -90,7 +90,7 @@ class TrackerApplication {
         if ("a" in msg.data && msg.data.a != null) {
             if (ALERT_LOCATION in msg.data.a) {
                 server.log(msg.data.a[ALERT_LOCATION]["description"]);
-                _twitter.geofenceTweet(msg.data.a[ALERT_LOCATION]["trigger"]);
+                _twitter.geofenceTweet(msg.data.a[ALERT_LOCATION]);
             }
         }
     }

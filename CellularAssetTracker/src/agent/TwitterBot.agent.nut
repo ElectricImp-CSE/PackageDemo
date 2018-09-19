@@ -17,10 +17,19 @@ class TwitterBot {
         _twitter = Twitter(TEST_API_KEY, TEST_API_SECRET, TEST_AUTH_TOKEN, TEST_TOKEN_SECRET);
     }
 
-    function geofenceTweet(inBounds) {
+    function geofenceTweet(alert) {
         // TODO: get acutal twitter messages
-        local msg = (inBounds) ? "Find Charlie he is in the geofence" : "Charlie has left the area";
+        // { "description": "Device crossed geofence boundry. Device inside geofence area.", "type": 6, "trigger": true, "created": 1537397511 }
+        local ts = (alert.trigger) ? formatTimestamp(alert.created) : formatTimestamp(alert.resolved);
+        local msg = format("At %s %s", ts, alert.description);
+        server.log("Tweeting: " + msg);
         _twitter.tweet(msg);
+    }
+
+    // Converts timestamp to "00:54:51 2017-12-03" format
+    function formatTimestamp(ts = null) {
+        local d = ts ? date(ts) : date();
+        return format("%02d:%02d:%02d %04d-%02d-%02d", d.hour, d.min, d.sec, d.year, d.month + 1, d.day);
     }
 
 }

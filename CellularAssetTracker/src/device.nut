@@ -106,7 +106,7 @@ class TrackerApplication {
         const HUMID_LOW_ALERT_DESC            = "Humidity below threshold";
         const MOVE_ALERT_DESC                 = "Movement detected";
         const LIGHT_ALERT_DESC                = "Light level above threshold";
-        const LOCATION_ALERT_DESC             = "Device crossed geofence boundry";
+        const LOCATION_ALERT_DESC             = "Device crossed geofence boundry. %s";
     }
 
     constructor(debug = false) {
@@ -318,7 +318,7 @@ class TrackerApplication {
                         alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LOCATION;
                         alert[ALERT_TRIGGER]     <- inBounds;
                         alert[ALERT_CREATED]     <- reading[READING_TS];
-                        alert[ALERT_DESCRIPTION] <- LOCATION_ALERT_DESC;
+                        alert[ALERT_DESCRIPTION] <- format(LOCATION_ALERT_DESC, (inBounds) ? "Device inside geofence area." : "Device outside geofence area.");
                         _alerts[ALERT_LOCATION]  <- alert;
                         // Start blinking LED
                         _led.blink(LED.BLUE);
