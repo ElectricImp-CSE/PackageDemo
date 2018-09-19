@@ -32,7 +32,7 @@ class SalesforceApp {
         const PASSWORD        = "@{SALESFORCE_PASSWORD}";
         const LOGIN_TOKEN     = "@{SALESFORCE_LOGIN_TOKEN}";
         const EVENT_NAME      = "Container__e";
-        const ASSET_ID        = "02iB00000009N2KIAU";
+        const ASSET_ID_3EA    = "02iB00000009N2KIAU";
 
         @include "agent/AgentSalesforceComs.agent.nut";
     }
@@ -63,7 +63,7 @@ class SalesforceApp {
 
         local body = {};
         body[EVENT_NAME_DEVICE_ID] <- impDeviceId;
-        body[EVENT_NAME_ASSET_ID]  <- ASSET_ID;
+        body[EVENT_NAME_ASSET_ID]  <- ASSET_ID_3EA;
 
         // Only send the most recent reading to Salesforce
         local last = data.r.pop();
