@@ -145,10 +145,10 @@ class TrackerApplication {
 
         // Start readings loop
         takeReadings();
-        // Enable movement tracking
-        _moveMon.setMovementHandler(movementHanlder.bindenv(this));
-        // TODO: Replace movement checker with configure interrupt to conserve power
-        _moveMon.startMovementChecker();
+        // // Enable movement tracking
+        // _moveMon.setMovementHandler(movementHanlder.bindenv(this));
+        // // TODO: Replace movement checker with configure interrupt to conserve power
+        // _moveMon.startMovementChecker();
         // Enable geofencing half-a-mile~ish from stubed location
         local moffet_lat = "37.4068164";
         local moffet_lng = "-122.0665291";
