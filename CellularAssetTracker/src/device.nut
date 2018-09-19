@@ -74,8 +74,8 @@ class TrackerApplication {
 
     // Use to test GPS if we don't have the hardware
     static STUB_LOC_DATA = false;
-    static STUB_LOC_LAT  = "37.395337";
-    static STUB_LOC_LNG  = "-122.102458";
+    static STUB_LOC_LAT  = "37.3952484";
+    static STUB_LOC_LNG  = "-122.1034769";
 
     _mm              = null;
     _envMon          = null;
@@ -150,7 +150,10 @@ class TrackerApplication {
         // TODO: Replace movement checker with configure interrupt to conserve power
         _moveMon.startMovementChecker();
         // Enable geofencing half-a-mile~ish from stubed location
-        _locMon.enableGeofence(STUB_LOC_LAT, STUB_LOC_LNG, 800, geofenceAlertHandler.bindenv(this))
+        local moffet_lat = "37.4068164";
+        local moffet_lng = "-122.0665291";
+        local half_a_mile_ish = 800; // meters
+        _locMon.enableGeofence(half_a_mile_ish, STUB_LOC_LAT, STUB_LOC_LNG, geofenceAlertHandler.bindenv(this))
     }
 
     function geofenceAlertHandler(inBounds) {
@@ -325,7 +328,7 @@ class TrackerApplication {
                     // Add location info to readings
                     local inBounds = _locMon.inBounds();
                     if (inBounds != null) {
-                        reading[DEV_STATE_IS_IN_BOUNDS] <- _locMon.inBounds;
+                        reading[DEV_STATE_IS_IN_BOUNDS] <- inBounds;
                     }
                 }
 

@@ -59,7 +59,7 @@ class LocationMonitor {
             // Update location received timestamp
             _locCheckedAt = time();
 
-            if ("sentenceId" in data && data.sentenceId == GPS_PARSER_GGA) {
+            if (_geofenceCB != null && "sentenceId" in data && data.sentenceId == GPS_PARSER_GGA) {
                 calculateDistance(data);
             }
 
@@ -123,8 +123,9 @@ class LocationMonitor {
             local new  = _getCartesianCoods(lat, lng, alt);
             local dist = math.sqrt((new.x - _gfCtr.x)*(new.x - _gfCtr.x) + (new.y - _gfCtr.y)*(new.y - _gfCtr.y) + (new.z - _gfCtr.z)*(new.z - _gfCtr.z));
 
-            // server.log("New distance: " + dist + " M");
+            // server.log("New distance: " + dist + " Meters");
             local inBounds = (dist <= _distFromCtr);
+            // server.log("Device inBounds: " + inBounds);
             if (_geofenceCB != null && inBounds != _inBounds) {
                 _geofenceCB(inBounds);
             }
@@ -140,11 +141,12 @@ class LocationMonitor {
         local latRad = lat * PI / 180;
         local lngRad = lng * PI / 180;
         local cosLat = math.cos(latRad);
+        local r = 6371000 + alt;
         local result = {};
 
-        result.x <- alt * cosLat * math.sin(lngRad);
-        result.y <- alt * math.sin(latRad);
-        result.z <- alt * cosLat * math.cos(lngRad);
+        result.x <- r * cosLat * math.cos(lngRad);
+        result.y <- r * cosLat * math.sin(lngRad);
+        result.z <- r * math.sin(latRad);
 
         return result;
     }

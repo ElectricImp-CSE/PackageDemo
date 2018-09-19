@@ -32,6 +32,7 @@ class SalesforceApp {
         const PASSWORD        = "@{SALESFORCE_PASSWORD}";
         const LOGIN_TOKEN     = "@{SALESFORCE_LOGIN_TOKEN}";
         const EVENT_NAME      = "Container__e";
+        const ASSET_ID        = "02iB00000009N2KIAU";
 
         @include "agent/AgentSalesforceComs.agent.nut";
     }
@@ -62,7 +63,7 @@ class SalesforceApp {
 
         local body = {};
         body[EVENT_NAME_DEVICE_ID] <- impDeviceId;
-        body[EVENT_NAME_ASSET_ID]  <- impDeviceId;
+        body[EVENT_NAME_ASSET_ID]  <- ASSET_ID;
 
         // Only send the most recent reading to Salesforce
         local last = data.r.pop();
@@ -88,7 +89,7 @@ class SalesforceApp {
                         // Try to login again, resend data if login successful
                         force.login(USERNAME, PASSWORD, LOGIN_TOKEN, function(loginErr, resp) {
                             if (loginErr != null) {
-                                server.error(loginErr);
+                                server.error(http.jsonencode(loginErr));
                             } else {
                                 server.log("Login successful.");
                                 sendData(data);
