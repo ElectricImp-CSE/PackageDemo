@@ -1,10 +1,15 @@
 // Agent/Device Coms
 #require "MessageManager.lib.nut:2.1.0"
+// Twitter Lib
+#require "Twitter.agent.lib.nut:2.0.0"
 
 // Select which web service and include here. These files
 // include a library require statement and must be included
 // before any other code.
 @include "agent/SalesforcePackageDemo.agent.nut";
+
+// Twitter Wrapper Class
+@include "agent/TwitterBot.agent.nut";
 
 // TRACKER APPLICATION CLASS
 // ---------------------------------------------------
@@ -14,6 +19,7 @@
 class TrackerApplication {
 
     _mm         = null;
+    _twitter    = null;
     _thresholds = null;
     _webService = null;
 
@@ -28,6 +34,9 @@ class TrackerApplication {
         // Creates device if needed/retrieves id, so we can
         // send device data.
         _webService = WebService(commandHandler.bindenv(this));
+
+        // Initialize Twitter library
+        _twitter = TwitterBot();
     }
 
     function commandHandler(cmd, payload) {
@@ -73,8 +82,17 @@ class TrackerApplication {
     function sendDataHandler(msg, reply) {
         server.log("Received data from device...");
         server.log(http.jsonencode(msg.data));
+
         // Send data to webservice
         _webService.sendData(msg.data);
+
+        // Tweet if charlie crossed geofence boundry
+        if ("a" in msg.data && msg.data.a != null) {
+            if (ALERT_LOCATION in msg.data.a) {
+                server.log(msg.data.a[ALERT_LOCATION]["description"]);
+                _twitter.geofenceTweet(msg.data.a[ALERT_LOCATION]["trigger"]);
+            }
+        }
     }
 
     function _getSettingsHandler(msg, reply) {
