@@ -313,17 +313,22 @@ class TrackerApplication {
                     alertUpdate = true;
                     // Update alert table
                     if (inBounds && !(ALERT_LOCATION in _alerts)) {
+                        // Add new alert to alerts table
                         local alert = {};
                         alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LOCATION;
                         alert[ALERT_TRIGGER]     <- inBounds;
                         alert[ALERT_CREATED]     <- reading[READING_TS];
                         alert[ALERT_DESCRIPTION] <- LOCATION_ALERT_DESC;
                         _alerts[ALERT_LOCATION]  <- alert;
+                        // Start blinking LED
+                        _led.blink(LED.BLUE);
                     } else if (!inBounds && ALERT_LOCATION in _alerts) {
-                        // Clear a movement alert
+                        // Update alert to resolved, after message is sent to
+                        // agent it will be cleared a alert table
                         _alerts[ALERT_LOCATION][ALERT_RESOLVED] <- reading[READING_TS];
+                        // Stop blinking LED
+                        _led.stopBlink();
                     }
-
                 } else {
                     // Add location info to readings
                     local inBounds = _locMon.inBounds();
@@ -433,7 +438,8 @@ class TrackerApplication {
     }
 
     function locateHandler(msg, reply) {
-        _led.blink(LED.BLUE);
+        // Blink LED 5 times
+        _led.blink(LED.BLUE, 5);
     }
 
     function log(msg) {
@@ -449,6 +455,7 @@ class TrackerApplication {
 // Initialize the tracker app and start monitoring
 
 server.log(imp.getsoftwareversion());
+// Keep this workaround for light level to work until upgraded to 39.16
 imp.enableblinkup(true);
 
 server.log("Starting Tracker application.");
