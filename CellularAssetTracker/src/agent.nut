@@ -22,6 +22,7 @@ class TrackerApplication {
     _twitter    = null;
     _thresholds = null;
     _webService = null;
+    _mainDevice = null;
 
     constructor() {
         _loadStoredThresholds();
@@ -30,6 +31,12 @@ class TrackerApplication {
         // Register handler to sync settings with device on boot
         _mm.on(MM_GET_SETTINGS, _getSettingsHandler.bindenv(this));
         _mm.on(MM_SEND_DATA, sendDataHandler.bindenv(this));
+
+        if (imp.configparams.deviceid == "c0010c2a69f0099c") {
+            _mainDevice = true;
+        } else {
+            _mainDevice = false;
+        }
 
         // Creates device if needed/retrieves id, so we can
         // send device data.
@@ -84,10 +91,10 @@ class TrackerApplication {
         server.log(http.jsonencode(msg.data));
 
         // Send data to webservice
-        _webService.sendData(msg.data);
+        _webService.sendData(msg.data, _mainDevice);
 
-        // Tweet if charlie crossed geofence boundry
-        if ("a" in msg.data && msg.data.a != null) {
+        // Tweet if main device and charlie crossed geofence boundry
+        if (_mainDevice && "a" in msg.data && msg.data.a != null) {
             if (ALERT_LOCATION in msg.data.a) {
                 server.log(msg.data.a[ALERT_LOCATION]["description"]);
                 _twitter.geofenceTweet(msg.data.a[ALERT_LOCATION]);

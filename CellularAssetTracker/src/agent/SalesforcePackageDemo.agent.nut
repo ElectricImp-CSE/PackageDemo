@@ -26,13 +26,16 @@ class SalesforceApp {
     agentId        = null;
 
     function __statics__() {
-        const CONSUMER_KEY    = "@{SALESFORCE_CONSUMER_KEY}";
-        const CONSUMER_SECRET = "@{SALESFORCE_CONSUMER_SECRET}";
-        const USERNAME        = "@{SALESFORCE_USERNAME}";
-        const PASSWORD        = "@{SALESFORCE_PASSWORD}";
-        const LOGIN_TOKEN     = "@{SALESFORCE_LOGIN_TOKEN}";
-        const EVENT_NAME      = "Container__e";
-        const ASSET_ID_3EA    = "02iB00000009N2KIAU";
+        const SF_VERSION       = "v43.0";
+        const CONSUMER_KEY     = "@{SALESFORCE_CONSUMER_KEY}";
+        const CONSUMER_SECRET  = "@{SALESFORCE_CONSUMER_SECRET}";
+        const USERNAME         = "@{SALESFORCE_USERNAME}";
+        const PASSWORD         = "@{SALESFORCE_PASSWORD}";
+        const LOGIN_TOKEN      = "@{SALESFORCE_LOGIN_TOKEN}";
+        const EVENT_NAME       = "Container__e";
+        const ASSET_ID_99C     = "02iB00000009N2KIAU";
+        const ASSET_ID_309     = "02iB0000000U2BuIAK";
+        const ASSET_COLD_CHAIN = "02iB0000000U2DkIAK";
 
         @include "agent/AgentSalesforceComs.agent.nut";
     }
@@ -43,6 +46,7 @@ class SalesforceApp {
 
         sendUrl = format("sobjects/%s/", EVENT_NAME);
         force = Salesforce(CONSUMER_KEY, CONSUMER_SECRET);
+        force.setVersion(SF_VERSION);
         topicListener = _topicListener;
 
         force.login(USERNAME, PASSWORD, LOGIN_TOKEN, function(err, resp) {
@@ -53,7 +57,7 @@ class SalesforceApp {
         // Open listeners for incomming messages (BayeuxClient??)
     }
 
-    function sendData(data) {
+    function sendData(data, mainDevice) {
         // Don't send if we are not logged in
         if (!force.isLoggedIn()) {
             server.error("Not logged into Salesforce. Not sending data: ");
@@ -63,7 +67,8 @@ class SalesforceApp {
 
         local body = {};
         body[EVENT_NAME_DEVICE_ID] <- impDeviceId;
-        body[EVENT_NAME_ASSET_ID]  <- ASSET_ID_3EA;
+        // Add asset ID
+        body[EVENT_NAME_ASSET_ID] <- (mainDevice) ? ASSET_ID_99C : ASSET_ID_309;
 
         // Only send the most recent reading to Salesforce
         local last = data.r.pop();

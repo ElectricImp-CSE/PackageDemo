@@ -74,6 +74,7 @@ class TrackerApplication {
 
     // Use to test GPS if we don't have the hardware
     static STUB_LOC_DATA = false;
+    // Lat/lng for Imp HQ ~ish
     static STUB_LOC_LAT  = "37.3952484";
     static STUB_LOC_LNG  = "-122.1034769";
 
@@ -145,10 +146,12 @@ class TrackerApplication {
 
         // Start readings loop
         takeReadings();
+
         // // Enable movement tracking
         // _moveMon.setMovementHandler(movementHanlder.bindenv(this));
         // // TODO: Replace movement checker with configure interrupt to conserve power
         // _moveMon.startMovementChecker();
+
         // Enable geofencing half-a-mile~ish from stubed location
         local moffet_lat = "37.4068164";
         local moffet_lng = "-122.0665291";
@@ -183,6 +186,15 @@ class TrackerApplication {
 
                 local reading = {};
                 reading[READING_TS] <- time();
+                // Flag used to determine if alerts should be sent
+                // Currently alerts are sent when the alert condition
+                // is first noted and when the alert condition is resolved.
+                // Alert info will remain in the alert table, will not be sent
+                // to the agent again. All alerts with resolved timestamps will
+                // be removed from the table after they are sent.
+                // Note: The full alert table is sent when any alert is created,
+                // so agent may need to track alerts if resending same alert to
+                // server is an issue.
                 local alertUpdate = false;
 
                 // Add location to stored
@@ -202,55 +214,59 @@ class TrackerApplication {
                 // Add temperature to reading and update alert table if needed
                 if ("temperature" in results[0]) {
                     reading[READING_TEMP] <- results[0].temperature;
+
                     // Check if temp is in range
                     local alertType = _envMon.checkTemp(reading[READING_TEMP]);
                     // Add temp range flag to reading
                     reading[DEV_STATE_TEMP_IN_RANGE] <- (alertType == null);
 
-                    if (reading[DEV_STATE_TEMP_IN_RANGE] && ALERT_TEMP in _alerts) {
-                        // Update a temp alert with resolved timestamp
-                        _alerts[ALERT_TEMP][ALERT_RESOLVED] <- reading[READING_TS];
-                         // Set connect flag to update stage change
-                        alertUpdate = true;
-                    } else if (!reading[DEV_STATE_TEMP_IN_RANGE] && (!(ALERT_TEMP in _alerts) || _alerts[ALERT_TEMP][ALERT_TYPE] != alertType)) {
-                        // Temp is out of range and no alert for this condition has been issued, create alert
-                        local alert = {};
-                        alert[ALERT_TYPE]        <- alertType;
-                        alert[ALERT_TRIGGER]     <- reading[READING_TEMP];
-                        alert[ALERT_CREATED]     <- reading[READING_TS];
-                        alert[ALERT_DESCRIPTION] <- (alertType == ALERT_TYPE_ID.TEMP_HIGH) ? TEMP_HIGH_ALERT_DESC : TEMP_LOW_ALERT_DESC;
-                        // Add alert to _alerts table
-                        _alerts[ALERT_TEMP]  <- alert;
-                        // Set connect flag to update stage change
-                        alertUpdate = true;
-                    }
+                    // // Update alert table to send alert
+                    // if (reading[DEV_STATE_TEMP_IN_RANGE] && ALERT_TEMP in _alerts) {
+                    //     // Update a temp alert with resolved timestamp
+                    //     _alerts[ALERT_TEMP][ALERT_RESOLVED] <- reading[READING_TS];
+                    //      // Set connect flag to update stage change
+                    //     alertUpdate = true;
+                    // } else if (!reading[DEV_STATE_TEMP_IN_RANGE] && (!(ALERT_TEMP in _alerts) || _alerts[ALERT_TEMP][ALERT_TYPE] != alertType)) {
+                    //     // Temp is out of range and no alert for this condition has been issued, create alert
+                    //     local alert = {};
+                    //     alert[ALERT_TYPE]        <- alertType;
+                    //     alert[ALERT_TRIGGER]     <- reading[READING_TEMP];
+                    //     alert[ALERT_CREATED]     <- reading[READING_TS];
+                    //     alert[ALERT_DESCRIPTION] <- (alertType == ALERT_TYPE_ID.TEMP_HIGH) ? TEMP_HIGH_ALERT_DESC : TEMP_LOW_ALERT_DESC;
+                    //     // Add alert to _alerts table
+                    //     _alerts[ALERT_TEMP]  <- alert;
+                    //     // Set connect flag to update stage change
+                    //     alertUpdate = true;
+                    // }
                 }
 
                 // Add humidity to reading and update alert table if needed
                 if ("humidity" in results[0]) {
                     reading[READING_HUMID] <- results[0].humidity;
+
                     // Check if humidity is in range
                     local alertType = _envMon.checkHumid(reading[READING_HUMID]);
                     // Add humid range flag to reading
                     reading[DEV_STATE_HUMID_IN_RANGE] <- (alertType == null);
 
-                    if (reading[DEV_STATE_HUMID_IN_RANGE] && ALERT_HUMID in _alerts) {
-                        // Update a humid alert with resolved timestamp
-                        _alerts[ALERT_HUMID][ALERT_RESOLVED] <- reading[READING_TS];
-                        // Set connect flag to update stage change
-                        alertUpdate = true;
-                    } else if (!reading[DEV_STATE_HUMID_IN_RANGE] && (!(ALERT_HUMID in _alerts) || _alerts[ALERT_HUMID] != alertType)) {
-                        // Temp is out of range and no alert for this condition has been issued, create alert
-                        local alert = {};
-                        alert[ALERT_TYPE]        <- alertType;
-                        alert[ALERT_TRIGGER]     <- reading[READING_HUMID];
-                        alert[ALERT_CREATED]     <- reading[READING_TS];
-                        alert[ALERT_DESCRIPTION] <- (alertType == ALERT_TYPE_ID.HUMID_HIGH) ? HUMID_HIGH_ALERT_DESC : HUMID_LOW_ALERT_DESC;
-                        // Add alert to _alerts table
-                        _alerts[ALERT_HUMID] <- alert;
-                        // Set connect flag to update stage change
-                        alertUpdate = true;
-                    }
+                    // // Update alert table to send alert
+                    // if (reading[DEV_STATE_HUMID_IN_RANGE] && ALERT_HUMID in _alerts) {
+                    //     // Update a humid alert with resolved timestamp
+                    //     _alerts[ALERT_HUMID][ALERT_RESOLVED] <- reading[READING_TS];
+                    //     // Set connect flag to update stage change
+                    //     alertUpdate = true;
+                    // } else if (!reading[DEV_STATE_HUMID_IN_RANGE] && (!(ALERT_HUMID in _alerts) || _alerts[ALERT_HUMID] != alertType)) {
+                    //     // Temp is out of range and no alert for this condition has been issued, create alert
+                    //     local alert = {};
+                    //     alert[ALERT_TYPE]        <- alertType;
+                    //     alert[ALERT_TRIGGER]     <- reading[READING_HUMID];
+                    //     alert[ALERT_CREATED]     <- reading[READING_TS];
+                    //     alert[ALERT_DESCRIPTION] <- (alertType == ALERT_TYPE_ID.HUMID_HIGH) ? HUMID_HIGH_ALERT_DESC : HUMID_LOW_ALERT_DESC;
+                    //     // Add alert to _alerts table
+                    //     _alerts[ALERT_HUMID] <- alert;
+                    //     // Set connect flag to update stage change
+                    //     alertUpdate = true;
+                    // }
                 }
 
                 // Add Light Level to reading
