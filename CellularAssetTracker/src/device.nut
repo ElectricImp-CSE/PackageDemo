@@ -439,7 +439,18 @@ class TrackerApplication {
 
     function locateHandler(msg, reply) {
         // Blink LED 5 times
-        _led.blink(LED.BLUE, 5);
+        // NOTE: THIS WILL STEP ON GEO-FENCE
+        //       If geofence blink is happening
+        //       blink a different color,
+        //       then start blinking geofence
+        //       notice agian
+        if (_led.isBlinking()) {
+            _led.blink(LED.RED, 5);
+            imp.wakeup(10, function() {
+                _led.blink(LED.BLUE);
+            }.bindenv(this))
+        }
+
     }
 
     function log(msg) {

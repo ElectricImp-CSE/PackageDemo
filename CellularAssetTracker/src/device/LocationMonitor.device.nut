@@ -123,10 +123,11 @@ class LocationMonitor {
             local new  = _getCartesianCoods(lat, lng, alt);
             local dist = math.sqrt((new.x - _gfCtr.x)*(new.x - _gfCtr.x) + (new.y - _gfCtr.y)*(new.y - _gfCtr.y) + (new.z - _gfCtr.z)*(new.z - _gfCtr.z));
 
-            // server.log("New distance: " + dist + " Meters");
+            // server.log("Distance from geofence center: " + dist + " Meters");
             local inBounds = (dist <= _distFromCtr);
             // server.log("Device inBounds: " + inBounds);
             if (_geofenceCB != null && inBounds != _inBounds) {
+                server.log("Distance from geofence center: " + dist + " Meters");
                 _geofenceCB(inBounds);
             }
             // Track previous state, so we only trigger callback on a change

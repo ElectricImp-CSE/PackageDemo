@@ -30,6 +30,10 @@ class LED {
         on(OFF);
     }
 
+    function isBlinking() {
+        return (_blinkTimer != null);
+    }
+
     function blink(color, numBlinks = null) {
         if (numBlinks == 0) {
             stopBlink();
