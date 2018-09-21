@@ -9,9 +9,9 @@ class EnvMonitor {
 
     // Configure class constants
     function _statics_() {
-        const DEFAULT_TEMP_THRESHOLD_HIGH  = 35;
+        const DEFAULT_TEMP_THRESHOLD_HIGH  = 8.8;
         const DEFAULT_TEMP_THRESHOLD_LOW   = -20;
-        const DEFAULT_HUMID_THRESHOLD_HIGH = 100;
+        const DEFAULT_HUMID_THRESHOLD_HIGH = 60;
         const DEFAULT_HUMID_THRESHOLD_LOW  = 0;
         const DEFAULT_LX_THRESHOLD         = 3000;
         const NUM_LX_READS                 = 5;

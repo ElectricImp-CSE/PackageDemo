@@ -26,12 +26,15 @@ class SalesforceApp {
     agentId        = null;
 
     function __statics__() {
-        const CONSUMER_KEY    = "@{SALESFORCE_CONSUMER_KEY}";
-        const CONSUMER_SECRET = "@{SALESFORCE_CONSUMER_SECRET}";
-        const USERNAME        = "@{SALESFORCE_USERNAME}";
-        const PASSWORD        = "@{SALESFORCE_PASSWORD}";
-        const LOGIN_TOKEN     = "@{SALESFORCE_LOGIN_TOKEN}";
-        const EVENT_NAME      = "Container__e";
+        const SF_VERSION       = "v43.0";
+        const CONSUMER_KEY     = "@{SALESFORCE_CONSUMER_KEY}";
+        const CONSUMER_SECRET  = "@{SALESFORCE_CONSUMER_SECRET}";
+        const USERNAME         = "@{SALESFORCE_USERNAME}";
+        const PASSWORD         = "@{SALESFORCE_PASSWORD}";
+        const LOGIN_TOKEN      = "@{SALESFORCE_LOGIN_TOKEN}";
+
+        const EVENT_NAME       = "Container__e";
+        const ASSET_COLD_CHAIN = "02iB0000000U2DkIAK";
 
         @include "agent/AgentSalesforceComs.agent.nut";
     }
@@ -42,6 +45,7 @@ class SalesforceApp {
 
         sendUrl = format("sobjects/%s/", EVENT_NAME);
         force = Salesforce(CONSUMER_KEY, CONSUMER_SECRET);
+        force.setVersion(SF_VERSION);
         topicListener = _topicListener;
 
         force.login(USERNAME, PASSWORD, LOGIN_TOKEN, function(err, resp) {
@@ -62,7 +66,7 @@ class SalesforceApp {
 
         local body = {};
         body[EVENT_NAME_DEVICE_ID] <- impDeviceId;
-        body[EVENT_NAME_ASSET_ID]  <- impDeviceId;
+        body[EVENT_NAME_ASSET_ID]  <- ASSET_COLD_CHAIN;
 
         // Only send the most recent reading to Salesforce
         local last = data.r.pop();

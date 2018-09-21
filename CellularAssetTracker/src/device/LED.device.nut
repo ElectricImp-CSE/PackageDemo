@@ -1,9 +1,9 @@
 class LED {
 
     function __statics__() {
-        const NUM_BLINKS_DEFAULT = 5;
         const BRIGHTNESS_DEFAULT = 50;
         const BLINK_RATE_DEFAULT = 0.5;
+        const DEFAULT_NUM_LEDS   = 1;
     }
 
     static RED    = [BRIGHTNESS_DEFAULT, 0, 0];
@@ -17,8 +17,9 @@ class LED {
     _led          = null;
     _blinkTimer   = null;
 
-    constructor() {
-        _led = APA102(HAL.LED_SPI, 1).configure().draw();
+    constructor(numLEDs = null) {
+        if (numLEDs == null) numLEDs = DEFAULT_NUM_LEDS;
+        _led = APA102(HAL.LED_SPI, numLEDs).configure().draw();
     }
 
     function on(color) {
@@ -29,10 +30,12 @@ class LED {
         on(OFF);
     }
 
+    function isBlinking() {
+        return (_blinkTimer != null);
+    }
+
     function blink(color, numBlinks = null) {
-        if (numBlinks == null) {
-            numBlinks = NUM_BLINKS_DEFAULT;
-        } else if (numBlinks == 0) {
+        if (numBlinks == 0) {
             stopBlink();
             return;
         }
@@ -42,12 +45,14 @@ class LED {
             stopBlink();
         }
 
+        // Toggle on then off, decrease numBlinks if needed
         on(color);
         _blinkTimer = imp.wakeup(BLINK_RATE_DEFAULT, function() {
             off();
             _blinkTimer = imp.wakeup(BLINK_RATE_DEFAULT, function() {
                 _blinkTimer = null;
-                blink(color, --numBlinks);
+                if (numBlinks != null) --numBlinks;
+                blink(color, numBlinks);
             }.bindenv(this))
         }.bindenv(this))
     }
@@ -57,6 +62,7 @@ class LED {
             imp.cancelwakeup(_blinkTimer);
             _blinkTimer = null;
         }
+        off();
     }
 
 }

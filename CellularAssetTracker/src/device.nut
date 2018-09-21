@@ -74,6 +74,7 @@ class TrackerApplication {
 
     // Use to test GPS if we don't have the hardware
     static STUB_LOC_DATA = false;
+    // Lat/lng for Imp HQ ~ish
     static STUB_LOC_LAT  = "37.395337";
     static STUB_LOC_LNG  = "-122.102458";
 
@@ -106,6 +107,7 @@ class TrackerApplication {
         const HUMID_LOW_ALERT_DESC            = "Humidity below threshold";
         const MOVE_ALERT_DESC                 = "Movement detected";
         const LIGHT_ALERT_DESC                = "Light level above threshold";
+        const LOCATION_ALERT_DESC             = "Device crossed geofence boundry. %s";
     }
 
     constructor(debug = false) {
@@ -148,6 +150,16 @@ class TrackerApplication {
         _moveMon.setMovementHandler(movementHanlder.bindenv(this));
         // TODO: Replace movement checker with configure interrupt to conserve power
         _moveMon.startMovementChecker();
+
+        // Enable geofencing half-a-mile~ish from stubed location
+        local half_a_mile_ish = 800; // meters
+        _locMon.enableGeofence(half_a_mile_ish, STUB_LOC_LAT, STUB_LOC_LNG, geofenceAlertHandler.bindenv(this))
+    }
+
+    function geofenceAlertHandler(inBounds) {
+        // Change in
+        log("Geofence handler triggered...");
+        takeReadings(null, null, inBounds);
     }
 
     function movementHanlder(isMoving, magnitude = null) {
@@ -155,7 +167,7 @@ class TrackerApplication {
         takeReadings(isMoving, magnitude);
     }
 
-    function takeReadings(isMoving = null, magnitude = null) {
+    function takeReadings(isMoving = null, magnitude = null, inBounds = null) {
         // Make sure only one reading timer is running
         if (_readingTimer != null) {
             imp.cancelwakeup(_readingTimer);
@@ -171,6 +183,15 @@ class TrackerApplication {
 
                 local reading = {};
                 reading[READING_TS] <- time();
+                // Flag used to determine if alerts should be sent
+                // Currently alerts are sent when the alert condition
+                // is first noted and when the alert condition is resolved.
+                // Alert info will remain in the alert table, will not be sent
+                // to the agent again. All alerts with resolved timestamps will
+                // be removed from the table after they are sent.
+                // Note: The full alert table is sent when any alert is created,
+                // so agent may need to track alerts if resending same alert to
+                // server is an issue.
                 local alertUpdate = false;
 
                 // Add location to stored
@@ -190,11 +211,13 @@ class TrackerApplication {
                 // Add temperature to reading and update alert table if needed
                 if ("temperature" in results[0]) {
                     reading[READING_TEMP] <- results[0].temperature;
+
                     // Check if temp is in range
                     local alertType = _envMon.checkTemp(reading[READING_TEMP]);
                     // Add temp range flag to reading
                     reading[DEV_STATE_TEMP_IN_RANGE] <- (alertType == null);
 
+                    // Update alert table to send alert
                     if (reading[DEV_STATE_TEMP_IN_RANGE] && ALERT_TEMP in _alerts) {
                         // Update a temp alert with resolved timestamp
                         _alerts[ALERT_TEMP][ALERT_RESOLVED] <- reading[READING_TS];
@@ -217,11 +240,13 @@ class TrackerApplication {
                 // Add humidity to reading and update alert table if needed
                 if ("humidity" in results[0]) {
                     reading[READING_HUMID] <- results[0].humidity;
+
                     // Check if humidity is in range
                     local alertType = _envMon.checkHumid(reading[READING_HUMID]);
                     // Add humid range flag to reading
                     reading[DEV_STATE_HUMID_IN_RANGE] <- (alertType == null);
 
+                    // Update alert table to send alert
                     if (reading[DEV_STATE_HUMID_IN_RANGE] && ALERT_HUMID in _alerts) {
                         // Update a humid alert with resolved timestamp
                         _alerts[ALERT_HUMID][ALERT_RESOLVED] <- reading[READING_TS];
@@ -291,6 +316,38 @@ class TrackerApplication {
                     // Update state with values from reading
                     reading[READING_MAG] <- results[2].magnitude;
                     reading[DEV_STATE_IS_MOVING] <- results[2].isMoving;
+                }
+
+                if (inBounds != null) {
+                    // Add location info to readings
+                    reading[DEV_STATE_IS_IN_BOUNDS] <- inBounds;
+
+                    // Create alert
+                    alertUpdate = true;
+                    // Update alert table
+                    if (inBounds && !(ALERT_LOCATION in _alerts)) {
+                        // Add new alert to alerts table
+                        local alert = {};
+                        alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LOCATION;
+                        alert[ALERT_TRIGGER]     <- inBounds;
+                        alert[ALERT_CREATED]     <- reading[READING_TS];
+                        alert[ALERT_DESCRIPTION] <- format(LOCATION_ALERT_DESC, (inBounds) ? "Device inside geofence area." : "Device outside geofence area.");
+                        _alerts[ALERT_LOCATION]  <- alert;
+                        // Start blinking LED (if visible)
+                        // _led.blink(LED.BLUE);
+                    } else if (!inBounds && ALERT_LOCATION in _alerts) {
+                        // Update alert to resolved, after message is sent to
+                        // agent it will be cleared a alert table
+                        _alerts[ALERT_LOCATION][ALERT_RESOLVED] <- reading[READING_TS];
+                        // Stop blinking LED (if visible)
+                        // _led.stopBlink();
+                    }
+                } else {
+                    // Add location info to readings
+                    local inBounds = _locMon.inBounds();
+                    if (inBounds != null) {
+                        reading[DEV_STATE_IS_IN_BOUNDS] <- inBounds;
+                    }
                 }
 
                 // Store data
@@ -394,7 +451,19 @@ class TrackerApplication {
     }
 
     function locateHandler(msg, reply) {
-        _led.blink(LED.BLUE);
+        // Blink LED 5 times
+        // NOTE: THIS WILL STEP ON GEO-FENCE
+        //       If geofence blink is happening
+        //       blink a different color,
+        //       then start blinking geofence
+        //       notice agian
+        if (_led.isBlinking()) {
+            _led.blink(LED.RED, 5);
+            imp.wakeup(10, function() {
+                _led.blink(LED.BLUE);
+            }.bindenv(this))
+        }
+
     }
 
     function log(msg) {
@@ -410,6 +479,7 @@ class TrackerApplication {
 // Initialize the tracker app and start monitoring
 
 server.log(imp.getsoftwareversion());
+// Keep this workaround for light level to work until upgraded to 39.16 or above
 imp.enableblinkup(true);
 
 server.log("Starting Tracker application.");
