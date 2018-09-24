@@ -559,7 +559,7 @@ class TrackerApplication {
         _blink = blinkInsideGeofence;
         // Blink LEDs
         if (_ledBlinkState) {
-            _led.blink(LED.BLUE);
+            _led.blinkAlternating(LED.BLUE, LED.WHITE);
         } else {
             _led.stopBlink();
         }

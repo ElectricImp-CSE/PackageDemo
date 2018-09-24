@@ -41,20 +41,28 @@ class LED {
         return (_blinkTimer != null);
     }
 
+    function blinkAlternating(color1, color2, rate = LED_BLINK_RATE.NORMAL, numBlinks = null) {
+        _blink(color1, color2, rate, numBlinks);
+    }
+
     function blink(color, rate = LED_BLINK_RATE.NORMAL, numBlinks = null) {
+        _blink(color, OFF, rate, numBlinks);
+    }
+
+    function _blink(color1, color2, rate, numBlinks) {
         if (numBlinks == 0) {
             stopBlink();
             return;
         }
 
         // Set normal blink rate
-        local onTime  = BLINK_RATE_DEFAULT;
-        local offTime = BLINK_RATE_DEFAULT;
+        local onTimeC1 = BLINK_RATE_DEFAULT;
+        local onTimeC2 = BLINK_RATE_DEFAULT;
 
         // Update if rate is set to slow
         if (rate == LED_BLINK_RATE.SLOW) {
-            onTime = BLINK_RATE_SLOW_ON;
-            offTime = BLINK_RATE_SLOW_OFF;
+            onTimeC1 = BLINK_RATE_SLOW_ON;
+            onTimeC2 = BLINK_RATE_SLOW_OFF;
         }
 
         // Make sure we only have one timer at a time
@@ -63,13 +71,13 @@ class LED {
         }
 
         // Toggle on then off, decrease numBlinks if needed
-        on(color);
-        _blinkTimer = imp.wakeup(onTime, function() {
-            off();
-            _blinkTimer = imp.wakeup(offTime, function() {
+        on(color1);
+        _blinkTimer = imp.wakeup(onTimeC1, function() {
+            on(color2);
+            _blinkTimer = imp.wakeup(onTimeC2, function() {
                 _blinkTimer = null;
                 if (numBlinks != null) --numBlinks;
-                blink(color, rate, numBlinks);
+                _blink(color1, color2, rate, numBlinks);
             }.bindenv(this))
         }.bindenv(this))
     }
