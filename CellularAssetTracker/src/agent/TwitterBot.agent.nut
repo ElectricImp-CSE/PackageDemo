@@ -21,7 +21,9 @@ class TwitterBot {
         // TODO: get acutal twitter messages
         // { "description": "Device crossed geofence boundry. Device inside geofence area.", "type": 6, "trigger": true, "created": 1537397511 }
         local ts = (alert.trigger) ? formatTimestamp(alert.created) : formatTimestamp(alert.resolved);
-        local msg = format("At %s %s", ts, alert.description);
+        // local msg = format("At %s %s", ts, alert.description);
+        local message = "#findcharlie is active! Find me here and tweet a picture with #ifoundcharlie to win a prize #DF18 #iot @electricimp @appirio";
+        local msg = format("At %s %s", ts, "#findcharlie is active!"); // TB
         server.log("Tweeting: " + msg);
         _twitter.tweet(msg);
     }

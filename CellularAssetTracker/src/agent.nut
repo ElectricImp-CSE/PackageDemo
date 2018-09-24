@@ -18,11 +18,15 @@
 
 class TrackerApplication {
 
+    static MAIN_TRACKER_ID_YELLOW = "c0010c2a69f0099c";
+    static BU_TRACKER_ID_RED      = "c0010c2a69f00309";
+
     _mm         = null;
     _twitter    = null;
     _thresholds = null;
     _webService = null;
-    _mainDevice = null;
+    _currCharlieDev = null;
+    _battState  = null;
 
     constructor() {
         _loadStoredThresholds();
@@ -32,10 +36,11 @@ class TrackerApplication {
         _mm.on(MM_GET_SETTINGS, _getSettingsHandler.bindenv(this));
         _mm.on(MM_SEND_DATA, sendDataHandler.bindenv(this));
 
-        if (imp.configparams.deviceid == "c0010c2a69f0099c") {
-            _mainDevice = true;
+        // Make sure only the device on Charlie is tweeting
+        if (imp.configparams.deviceid == MAIN_TRACKER_ID_YELLOW) {
+            _currCharlieDev = true;
         } else {
-            _mainDevice = false;
+            _currCharlieDev = false;
         }
 
         // Creates device if needed/retrieves id, so we can
@@ -44,6 +49,10 @@ class TrackerApplication {
 
         // Initialize Twitter library
         _twitter = TwitterBot();
+
+        // Register your HTTP request handler
+        // NOTE your agent code can only have ONE handler
+        http.onrequest(_requestHandler.bindenv(this));
     }
 
     function commandHandler(cmd, payload) {
@@ -91,14 +100,20 @@ class TrackerApplication {
         server.log(http.jsonencode(msg.data));
 
         // Send data to webservice
-        _webService.sendData(msg.data, _mainDevice);
+        _webService.sendData(msg.data, _currCharlieDev);
 
         // Tweet if main device and charlie crossed geofence boundry
-        if (_mainDevice && "a" in msg.data && msg.data.a != null) {
-            if (ALERT_LOCATION in msg.data.a) {
+        if (_currCharlieDev && "a" in msg.data && msg.data[ALERTS] != null) {
+            if (ALERT_LOCATION in msg.data[ALERTS]) {
                 server.log(msg.data.a[ALERT_LOCATION]["description"]);
                 _twitter.geofenceTweet(msg.data.a[ALERT_LOCATION]);
             }
+        }
+
+        if (BATTERY in msg.data) {
+            _battState = msg.data[BATTERY]
+            server.log("Remaining cell capacity: " + _battState[BATTERY_CAPACITY] + "mAh");
+            server.log("Percent of battery remaining: " + _battState[BATTERY_PERCENT] + "%");
         }
     }
 
@@ -117,6 +132,23 @@ class TrackerApplication {
             _thresholds[k] <- v;
         }
         server.save({"thresholds" : _thresholds});
+    }
+
+
+    function _requestHandler(request, response) {
+        // Always use try... catch to trap errors
+        try {
+            // Check if the variable 'led' was passed into the query
+            if (_battState != null && request.method == "GET" && request.path == "/battery") {
+                local html = "<h1>Percent of battery remaining: " +_battState[BATTERY_PERCENT] + "%</h1><h1>Remaining cell capacity: " + _battState[BATTERY_CAPACITY] + "mAh</h1>"
+                response.send(200, html);
+            } else {
+                // Send a response back to whoever made the request
+                response.send(200, "OK");
+            }
+        } catch (exp) {
+            response.send(500, "Error: " + exp);
+        }
     }
 }
 

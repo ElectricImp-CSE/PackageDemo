@@ -19,6 +19,10 @@
 // Library to help with asynchonous programming
 #require "promise.class.nut:3.0.1"
 
+// Add Battery Charger and Fuel Gauge libraries
+#require "BQ25895M.device.lib.nut:1.0.0"
+#require "MAX17055.device.lib.nut:1.0.1"
+
 #require "PrettyPrinter.class.nut:1.0.1"
 #require "JSONEncoder.class.nut:1.0.0"
 
@@ -66,23 +70,46 @@ print <- pp.print.bindenv(pp);
 
 @include "device/LED.device.nut";
 
+// BATTERY MONITORING CLASS
+// ---------------------------------------------------
+// Class to manage Battery Charger and Fuel Gauge
+
+@include "device/BatteryMonitor.device.nut";
+
 // TRACKER APPLICATION CLASS
 // ---------------------------------------------------
 // Class to manage tracker application
+
+enum TRACKER_LOCATION {
+    EI_OFFICE,
+    HOWARD,
+    SF_TEST
+}
 
 class TrackerApplication {
 
     // Use to test GPS if we don't have the hardware
     static STUB_LOC_DATA = false;
-    // Lat/lng for Imp HQ ~ish
-    static STUB_LOC_LAT  = "37.3952484";
-    static STUB_LOC_LNG  = "-122.1034769";
+    // Lat/lng for Specified locals
+    static LOC_LAT_IMP_HQ  = "37.3952484";
+    static LOC_LNG_IMP_HQ  = "-122.1034769";
+    static LOC_LAT_TB_BWAY = "37.795661";   // TB: Broadway
+    static LOC_LNG_TB_BWAY = "-122.426654"; // TB
+    static LOC_LAT_HOWARD  = "37.784599";   // TB: Howard Street
+    static LOC_LNG_HOWARD  = "-122.401007"; // TB
+
+    static GEOFENCE_RADIUS = 100; // Geofence radius in meters
 
     _mm              = null;
     _envMon          = null;
     _moveMon         = null;
     _locMon          = null;
+    _battMon         = null;
     _led             = null;
+
+    _geofenceLat     = null;
+    _geofenceLng     = null;
+    _inBounds        = null;
 
     _debug           = null;
     _reportingInt    = null;
@@ -110,11 +137,26 @@ class TrackerApplication {
         const LOCATION_ALERT_DESC             = "Device crossed geofence boundry. %s";
     }
 
-    constructor(debug = false) {
+    constructor(location, debug = false) {
         _debug = debug;
         _ready = false;
 
         HAL.PWR_GATE_EN.configure(DIGITAL_OUT, 1);
+
+        switch (location) {
+            case TRACKER_LOCATION.HOWARD:
+                _geofenceLat = LOC_LAT_HOWARD;
+                _geofenceLng = LOC_LNG_HOWARD;
+                break;
+            case TRACKER_LOCATION.SF_TEST:
+                _geofenceLat = LOC_LAT_TB_BWAY;
+                _geofenceLng = LOC_LNG_TB_BWAY;
+                break;
+            case TRACKER_LOCATION.EI_OFFICE:
+                _geofenceLat = LOC_LAT_IMP_HQ;
+                _geofenceLng = LOC_LNG_IMP_HQ;
+                break;
+        }
 
         // Initialize sensors
         initializeMonitors();
@@ -135,6 +177,20 @@ class TrackerApplication {
         _mm.send(MM_GET_SETTINGS, null, settingsHandlers);
     }
 
+    function logNetInfo() {
+        local netData = imp.net.info();
+        if ("active" in netData) {
+            local type = netData.interface[netData.active].type;
+
+            // We have an active network connection
+            if (type == "cell") {
+                // The imp is on a cellular connection
+                server.log("cellular RSSI " + netData.interface[netData.active].rssi);
+                server.log("cellinfo " + netData.interface[netData.active].cellinfo);
+            }
+        }
+    }
+
     // Start tracker application
     function run() {
         // Wait til we get settings from agent before starting readings loop
@@ -144,6 +200,9 @@ class TrackerApplication {
         }
         log("Tracker ready...");
 
+        // Start LEDs blinking slow yellow
+        _led.blink(LED.YELLOW, LED_BLINK_RATE.SLOW); // TB
+
         // Start readings loop
         takeReadings();
 
@@ -152,11 +211,8 @@ class TrackerApplication {
         // // TODO: Replace movement checker with configure interrupt to conserve power
         // _moveMon.startMovementChecker();
 
-        // Enable geofencing half-a-mile~ish from stubed location
-        local moffet_lat = "37.4068164";
-        local moffet_lng = "-122.0665291";
-        local half_a_mile_ish = 800; // meters
-        _locMon.enableGeofence(half_a_mile_ish, STUB_LOC_LAT, STUB_LOC_LNG, geofenceAlertHandler.bindenv(this))
+        // Enable geofencing
+        _locMon.enableGeofence(GEOFENCE_RADIUS, _geofenceLat, _geofenceLng, geofenceAlertHandler.bindenv(this))
     }
 
     function geofenceAlertHandler(inBounds) {
@@ -200,8 +256,8 @@ class TrackerApplication {
                 // Add location to stored
                 if (STUB_LOC_DATA) {
                     // Add stub location data
-                    reading[READING_LAT] <- STUB_LOC_LAT;
-                    reading[READING_LNG] <- STUB_LOC_LNG;
+                    reading[READING_LAT] <- _geofenceLat;
+                    reading[READING_LNG] <- _geofenceLng;
                 } else {
                     // Add location if GPS is reporting data
                     local loc = _locMon.getLocation();
@@ -324,6 +380,8 @@ class TrackerApplication {
                 if (inBounds != null) {
                     // Add location info to readings
                     reading[DEV_STATE_IS_IN_BOUNDS] <- inBounds;
+                    // Hack so we can track how LEDs should blink
+                    _inBounds = inBounds;
 
                     // Create alert
                     alertUpdate = true;
@@ -336,14 +394,15 @@ class TrackerApplication {
                         alert[ALERT_CREATED]     <- reading[READING_TS];
                         alert[ALERT_DESCRIPTION] <- format(LOCATION_ALERT_DESC, (inBounds) ? "Device inside geofence area." : "Device outside geofence area.");
                         _alerts[ALERT_LOCATION]  <- alert;
-                        // Start blinking LED
+                        // Start blinking LED blue normal rate
                         _led.blink(LED.BLUE);
                     } else if (!inBounds && ALERT_LOCATION in _alerts) {
                         // Update alert to resolved, after message is sent to
                         // agent it will be cleared a alert table
                         _alerts[ALERT_LOCATION][ALERT_RESOLVED] <- reading[READING_TS];
-                        // Stop blinking LED
-                        _led.stopBlink();
+                        // Blink leds slow yellow
+                        _led.blink(LED.YELLOW, LED_BLINK_RATE.SLOW); // TB
+                        // _led.stopBlink();
                     }
                 } else {
                     // Add location info to readings
@@ -376,6 +435,9 @@ class TrackerApplication {
             payload[READINGS] <- _data;
             // Only send alert table if there has been an update to the alert
             payload[ALERTS]   <- (alertUpdated) ? _alerts : null;
+            // Send battery status
+            local bStatus = _battMon.getChargeStatus();
+            if (bStatus != null) payload[BATTERY] <- bStatus;
             // Send data, use ACK handler to delete sent data/alerts after delivery
             _mm.send(MM_SEND_DATA, payload, {"onAck" : sendReadingsAckHandler.bindenv(this)});
             // TODO: Add onFail to make sure we don't run out of memory if we aren't able to
@@ -435,6 +497,7 @@ class TrackerApplication {
         _envMon  = EnvMonitor();
         _moveMon = MovementMonitor();
         _locMon  = LocationMonitor(false);
+        _battMon = BatteryMonitor();
     }
 
     function updateSettings(settings) {
@@ -461,9 +524,13 @@ class TrackerApplication {
         //       then start blinking geofence
         //       notice agian
         if (_led.isBlinking()) {
-            _led.blink(LED.RED, 5);
-            imp.wakeup(10, function() {
-                _led.blink(LED.BLUE);
+            _led.blink(LED.RED, LED_BLINK_RATE.NORMAL, 5);
+            imp.wakeup(20, function() {
+                if (_inBounds) {
+                    _led.blink(LED.BLUE);
+                } else {
+                    _led.blink(LED.YELLOW, LED_BLINK_RATE.SLOW);
+                }
             }.bindenv(this))
         }
 
@@ -487,5 +554,9 @@ imp.enableblinkup(true);
 
 server.log("Starting Tracker application.");
 local debugLogging = true;
-tracker <- TrackerApplication(debugLogging);
+// Initialize with geofence location and debug logging flag
+tracker <- TrackerApplication(TRACKER_LOCATION.SF_TEST, debugLogging);
+// Log net info
+tracker.logNetInfo();
+// Start application
 tracker.run();

@@ -31,6 +31,10 @@ const ALERT_DESCRIPTION        = "description";
 const ALERT_TRIGGER            = "trigger";
 const ALERT_CREATED            = "created";
 const ALERT_RESOLVED           = "resolved";
+// Battery status table
+const BATTERY                  = "b";
+const BATTERY_PERCENT          = "percent";
+const BATTERY_CAPACITY         = "capacity";
 // Threshold settings table
 const THRESH_TEMP_HIGH  = "tempHigh";
 const THRESH_TEMP_LOW   = "tempLow";
