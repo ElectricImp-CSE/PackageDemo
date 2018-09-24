@@ -7,7 +7,7 @@ class LED {
 
     function __statics__() {
         const BRIGHTNESS_DEFAULT  = 50;
-        const DEFAULT_NUM_LEDS    = 31;
+        const DEFAULT_NUM_LEDS    = 61;
 
         const BLINK_RATE_DEFAULT  = 0.5;
         const BLINK_RATE_SLOW_ON  = 0.25;   // TB
@@ -69,7 +69,7 @@ class LED {
             _blinkTimer = imp.wakeup(offTime, function() {
                 _blinkTimer = null;
                 if (numBlinks != null) --numBlinks;
-                blink(color, slow, numBlinks);
+                blink(color, rate, numBlinks);
             }.bindenv(this))
         }.bindenv(this))
     }

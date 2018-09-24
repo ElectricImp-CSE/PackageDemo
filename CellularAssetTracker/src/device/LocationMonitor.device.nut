@@ -4,7 +4,7 @@ class LocationMonitor {
 
     _lastLat      = null;
     _lastLng      = null;
-    _locCheckedAt = null;
+    _locUpdatedAt = null;
 
     _geofenceCB   = null;
     _gfCtr        = null;
@@ -41,7 +41,7 @@ class LocationMonitor {
     }
 
     function getLocation() {
-        return {"lat" : _lastLat, "lng" : _lastLng, "ts" : _locCheckedAt};
+        return {"lat" : _lastLat, "lng" : _lastLng, "ts" : _locUpdatedAt};
     }
 
     function gpsHandler(hasLoc, data) {
@@ -55,9 +55,11 @@ class LocationMonitor {
             if (locChanged(lat, lng) ) {
                 _lastLat = lat;
                 _lastLng = lng;
+
+                // Update location received timestamp
+                _locUpdatedAt = time();
             }
-            // Update location received timestamp
-            _locCheckedAt = time();
+
 
             if (_geofenceCB != null && "sentenceId" in data && data.sentenceId == GPS_PARSER_GGA) {
                 calculateDistance(data);

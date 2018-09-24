@@ -2,6 +2,8 @@
 #require "MessageManager.lib.nut:2.1.0"
 // Twitter Lib
 #require "Twitter.agent.lib.nut:2.0.0"
+// Rocky For incoming req
+#require "rocky.class.nut:2.0.1"
 
 // Select which web service and include here. These files
 // include a library require statement and must be included
@@ -19,14 +21,20 @@
 class TrackerApplication {
 
     static MAIN_TRACKER_ID_YELLOW = "c0010c2a69f0099c";
-    static BU_TRACKER_ID_RED      = "c0010c2a69f00309";
+    static BU_TRACKER_ID_RED      = "c0010c2a69f002b2";
+    static TWEET_TIMER_SEC        = 300;
 
     _mm         = null;
     _twitter    = null;
-    _thresholds = null;
-    _webService = null;
-    _currCharlieDev = null;
-    _battState  = null;
+    _api        = null;
+
+    _thresholds      = null;
+    _webService      = null;
+    _currCharlieDev  = null;
+    _battState       = null;
+    _ledBlinkState   = null;
+    _twitterBotTimer = null;
+    _lastLoc         = null;
 
     constructor() {
         _loadStoredThresholds();
@@ -36,6 +44,12 @@ class TrackerApplication {
         _mm.on(MM_GET_SETTINGS, _getSettingsHandler.bindenv(this));
         _mm.on(MM_SEND_DATA, sendDataHandler.bindenv(this));
 
+        _api = Rocky();
+        _api.get("/battery", _battReqHandler.bindenv(this));
+        _api.get("/leds/on", _ledOnReqHandler.bindenv(this));
+        _api.get("/leds/off", _ledOffReqHandler.bindenv(this));
+        _api.post("/leds", _ledReqHandler.bindenv(this));
+
         // Make sure only the device on Charlie is tweeting
         if (imp.configparams.deviceid == MAIN_TRACKER_ID_YELLOW) {
             _currCharlieDev = true;
@@ -43,16 +57,14 @@ class TrackerApplication {
             _currCharlieDev = false;
         }
 
+        _ledBlinkState = LED_BLINK_STATE.ON;
+
         // Creates device if needed/retrieves id, so we can
         // send device data.
         _webService = WebService(commandHandler.bindenv(this));
 
         // Initialize Twitter library
         _twitter = TwitterBot();
-
-        // Register your HTTP request handler
-        // NOTE your agent code can only have ONE handler
-        http.onrequest(_requestHandler.bindenv(this));
     }
 
     function commandHandler(cmd, payload) {
@@ -99,14 +111,51 @@ class TrackerApplication {
         server.log("Received data from device...");
         server.log(http.jsonencode(msg.data));
 
-        // Send data to webservice
-        _webService.sendData(msg.data, _currCharlieDev);
+        // Send readings if we have any
+        if (READINGS in msg.data && msg.data[READINGS].len() > 0) {
+
+            // Grab latest reading
+            local last = msg.data[READINGS].top();
+
+            // Grab lat known location
+            if (READING_LAT in last) {
+                _lastLoc = {
+                    "lat" : last[READING_LAT],
+                    "lng" : last[READING_LNG]
+                }
+            }
+
+            // Send data to webservice
+            _webService.sendData(last, _currCharlieDev);
+        }
 
         // Tweet if main device and charlie crossed geofence boundry
+        // "a": {
+        //     "locAlert": {
+        //         "description": "Device crossed geofence boundry. Device inside geofence area.",
+        //         "type": 6,
+        //         "trigger": true,
+        //         "created": 1537819749
+        //     }
+        // }
         if (_currCharlieDev && "a" in msg.data && msg.data[ALERTS] != null) {
             if (ALERT_LOCATION in msg.data[ALERTS]) {
-                server.log(msg.data.a[ALERT_LOCATION]["description"]);
-                _twitter.geofenceTweet(msg.data.a[ALERT_LOCATION]);
+                local alert = msg.data.a[ALERT_LOCATION];
+                server.log(alert["description"]);
+                if ("resolved" in alert) {
+                    // Just exited geofence area
+                    if (_twitterBotTimer != null) {
+                        imp.cancelwakeup(_twitterBotTimer);
+                        _twitterBotTimer = null;
+                    }
+                    _lastLoc = null;
+                    _twitter.geofenceTweet(TWEET_TYPE.EXIT);
+                } else {
+                    _twitter.geofenceTweet(TWEET_TYPE.ENTER, _lastLoc);
+                    _twitterBotTimer = imp.wakeup(TWEET_TIMER_SEC, function() {
+                        _twitter.geofenceTweet(TWEET_TYPE.INSIDE, _lastLoc);
+                    }.bindenv(this));
+                }
             }
         }
 
@@ -134,21 +183,39 @@ class TrackerApplication {
         server.save({"thresholds" : _thresholds});
     }
 
-
-    function _requestHandler(request, response) {
-        // Always use try... catch to trap errors
-        try {
-            // Check if the variable 'led' was passed into the query
-            if (_battState != null && request.method == "GET" && request.path == "/battery") {
-                local html = "<h1>Percent of battery remaining: " +_battState[BATTERY_PERCENT] + "%</h1><h1>Remaining cell capacity: " + _battState[BATTERY_CAPACITY] + "mAh</h1>"
-                response.send(200, html);
-            } else {
-                // Send a response back to whoever made the request
-                response.send(200, "OK");
-            }
-        } catch (exp) {
-            response.send(500, "Error: " + exp);
+    function _battReqHandler(context) {
+        if (_battState != null) {
+            local html = "<h1>Percent of battery remaining: " + _battState[BATTERY_PERCENT] + "%</h1><h1>Remaining cell capacity: " + _battState[BATTERY_CAPACITY] + "mAh</h1>"
+                context.send(200, html);
+        } else {
+            // Send a response back to whoever made the request
+            context.send(200, "<h1>No Battery Info available</h1>");
         }
+    }
+
+    function _ledOnReqHandler(context) {
+        _ledBlinkState = LED_BLINK_STATE.ON;
+        _mm.send(MM_LED_STATE, _ledBlinkState);
+        context.send(200, "Ok");
+    }
+
+    function _ledOffReqHandler(context) {
+        _ledBlinkState = LED_BLINK_STATE.OFF;
+        _mm.send(MM_LED_STATE, _ledBlinkState);
+        context.send(200, "Ok");
+    }
+
+    // expects {"state" : 0} or {"state" : 1}
+    function _ledReqHandler(context) {
+        context.send(200, "Ok");
+        if ("state" in context.req.body) {
+            local state = context.req.body.state;
+            if (typeof state == "string") {
+                state = state.tointeger();
+            }
+            _ledBlinkState = state;
+        }
+        _mm.send(MM_LED_STATE, _ledBlinkState);
     }
 }
 

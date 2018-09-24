@@ -98,7 +98,8 @@ class TrackerApplication {
     static LOC_LAT_HOWARD  = "37.784599";   // TB: Howard Street
     static LOC_LNG_HOWARD  = "-122.401007"; // TB
 
-    static GEOFENCE_RADIUS = 100; // Geofence radius in meters
+    // Geofence radius in meters
+    static GEOFENCE_RADIUS = 100;
 
     _mm              = null;
     _envMon          = null;
@@ -109,7 +110,8 @@ class TrackerApplication {
 
     _geofenceLat     = null;
     _geofenceLng     = null;
-    _inBounds        = null;
+    _blink           = null;
+    _ledBlinkState   = null;
 
     _debug           = null;
     _reportingInt    = null;
@@ -127,14 +129,16 @@ class TrackerApplication {
         const READING_INTERVAL_SEC       = 30;
         // On reboot, give agent time send stored settings
         const AGENT_DEV_SYNC_TIMEOUT_SEC = 5;
+        // Time out used to determine is location data is stale
+        const LOCATION_TIMEOUT_SEC       = 60;
 
-        const TEMP_HIGH_ALERT_DESC            = "Temperature above threshold";
-        const TEMP_LOW_ALERT_DESC             = "Temperature below threshold";
-        const HUMID_HIGH_ALERT_DESC           = "Humidity above threshold";
-        const HUMID_LOW_ALERT_DESC            = "Humidity below threshold";
-        const MOVE_ALERT_DESC                 = "Movement detected";
-        const LIGHT_ALERT_DESC                = "Light level above threshold";
-        const LOCATION_ALERT_DESC             = "Device crossed geofence boundry. %s";
+        const TEMP_HIGH_ALERT_DESC       = "Temperature above threshold";
+        const TEMP_LOW_ALERT_DESC        = "Temperature below threshold";
+        const HUMID_HIGH_ALERT_DESC      = "Humidity above threshold";
+        const HUMID_LOW_ALERT_DESC       = "Humidity below threshold";
+        const MOVE_ALERT_DESC            = "Movement detected";
+        const LIGHT_ALERT_DESC           = "Light level above threshold";
+        const LOCATION_ALERT_DESC        = "Device crossed geofence boundry. %s";
     }
 
     constructor(location, debug = false) {
@@ -173,6 +177,8 @@ class TrackerApplication {
         _mm.on(MM_UPDATE_SETTINGS, updateHandler.bindenv(this));
         // Register Locate handler
         _mm.on(MM_LOCATE, locateHandler.bindenv(this));
+        // Register LED master switch
+        _mm.on(MM_LED_STATE, upateLEDBlinkState.bindenv(this));
         // Get settings from agent, then initialize monitors
         _mm.send(MM_GET_SETTINGS, null, settingsHandlers);
     }
@@ -200,8 +206,9 @@ class TrackerApplication {
         }
         log("Tracker ready...");
 
-        // Start LEDs blinking slow yellow
-        _led.blink(LED.YELLOW, LED_BLINK_RATE.SLOW); // TB
+        _ledBlinkState = LED_BLINK_STATE.ON;
+        // Start LEDs blinking yellow at a slow rate, until we have a location
+        blinkOutsideGeofence();
 
         // Start readings loop
         takeReadings();
@@ -262,8 +269,15 @@ class TrackerApplication {
                     // Add location if GPS is reporting data
                     local loc = _locMon.getLocation();
                     if (loc.lat != null) {
-                        reading[READING_LAT] <- loc.lat;
-                        reading[READING_LNG] <- loc.lng;
+                        // Only add if data is not stale
+                        if (reading[READING_TS] - loc.ts < LOCATION_TIMEOUT_SEC) {
+                            reading[READING_LAT] <- loc.lat;
+                            reading[READING_LNG] <- loc.lng;
+                        } else if (inBounds) {
+                            // If no GPS data available, then reset inBounds variable to false
+                            inBounds = false;
+                        }
+
                     }
                 }
 
@@ -380,13 +394,12 @@ class TrackerApplication {
                 if (inBounds != null) {
                     // Add location info to readings
                     reading[DEV_STATE_IS_IN_BOUNDS] <- inBounds;
-                    // Hack so we can track how LEDs should blink
-                    _inBounds = inBounds;
 
-                    // Create alert
-                    alertUpdate = true;
                     // Update alert table
                     if (inBounds && !(ALERT_LOCATION in _alerts)) {
+                        // Toggle alert flag
+                        alertUpdate = true;
+
                         // Add new alert to alerts table
                         local alert = {};
                         alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LOCATION;
@@ -394,15 +407,17 @@ class TrackerApplication {
                         alert[ALERT_CREATED]     <- reading[READING_TS];
                         alert[ALERT_DESCRIPTION] <- format(LOCATION_ALERT_DESC, (inBounds) ? "Device inside geofence area." : "Device outside geofence area.");
                         _alerts[ALERT_LOCATION]  <- alert;
-                        // Start blinking LED blue normal rate
-                        _led.blink(LED.BLUE);
+                        // Start LEDs blinking blue at normal rate
+                        blinkInsideGeofence();
                     } else if (!inBounds && ALERT_LOCATION in _alerts) {
+                        // Toggle alert flag
+                        alertUpdate = true;
+
                         // Update alert to resolved, after message is sent to
                         // agent it will be cleared a alert table
                         _alerts[ALERT_LOCATION][ALERT_RESOLVED] <- reading[READING_TS];
-                        // Blink leds slow yellow
-                        _led.blink(LED.YELLOW, LED_BLINK_RATE.SLOW); // TB
-                        // _led.stopBlink();
+                        // Start LEDs blinking yellow at a slow rate
+                        blinkOutsideGeofence();
                     }
                 } else {
                     // Add location info to readings
@@ -488,6 +503,14 @@ class TrackerApplication {
         _ready   = true;
     }
 
+
+    function upateLEDBlinkState(msg, reply) {
+        // Update blinkstate
+        _ledBlinkState = msg.data;
+        // Start or stop blinking based on state
+        _blink();
+    }
+
     function updateHandler(msg, reply) {
         updateSettings(msg.data);
     }
@@ -526,14 +549,31 @@ class TrackerApplication {
         if (_led.isBlinking()) {
             _led.blink(LED.RED, LED_BLINK_RATE.NORMAL, 5);
             imp.wakeup(20, function() {
-                if (_inBounds) {
-                    _led.blink(LED.BLUE);
-                } else {
-                    _led.blink(LED.YELLOW, LED_BLINK_RATE.SLOW);
-                }
+                if (_blink != null) _blink();
             }.bindenv(this))
         }
+    }
 
+    function blinkInsideGeofence() {
+        // Store blink state in start function
+        _blink = blinkInsideGeofence;
+        // Blink LEDs
+        if (_ledBlinkState) {
+            _led.blink(LED.BLUE);
+        } else {
+            _led.stopBlink();
+        }
+    }
+
+    function blinkOutsideGeofence() {
+        // Store blink state in start function
+        _blink = blinkOutsideGeofence;
+        // Blink LEDs
+        if (_ledBlinkState) {
+            _led.blink(LED.YELLOW, LED_BLINK_RATE.SLOW);
+        } else {
+            _led.stopBlink();
+        }
     }
 
     function log(msg) {
@@ -555,7 +595,7 @@ imp.enableblinkup(true);
 server.log("Starting Tracker application.");
 local debugLogging = true;
 // Initialize with geofence location and debug logging flag
-tracker <- TrackerApplication(TRACKER_LOCATION.SF_TEST, debugLogging);
+tracker <- TrackerApplication(TRACKER_LOCATION.EI_OFFICE, debugLogging);
 // Log net info
 tracker.logNetInfo();
 // Start application

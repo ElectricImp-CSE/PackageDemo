@@ -3,6 +3,7 @@ const MM_GET_SETTINGS    = "getSettings";
 const MM_UPDATE_SETTINGS = "updateSettings";
 const MM_LOCATE          = "locate";
 const MM_SEND_DATA       = "sendData";
+const MM_LED_STATE       = "blinkLEDs";
 
 // Shared Agent/Device Table Keys
 // Reading table
@@ -52,4 +53,9 @@ enum ALERT_TYPE_ID {
     MOVE,
     LIGHT,
     LOCATION
+}
+
+enum LED_BLINK_STATE {
+    OFF,
+    ON
 }
