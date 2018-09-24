@@ -57,11 +57,11 @@ class SalesforceApp {
         // Open listeners for incomming messages (BayeuxClient??)
     }
 
-    function sendData(data, mainDevice) {
+    function sendData(last, mainDevice) {
         // Don't send if we are not logged in
         if (!force.isLoggedIn()) {
             server.error("Not logged into Salesforce. Not sending data: ");
-            server.log(http.jsonencode(data));
+            server.log(http.jsonencode(last));
             return;
         }
 
@@ -71,7 +71,6 @@ class SalesforceApp {
         body[EVENT_NAME_ASSET_ID] <- (mainDevice) ? ASSET_ID_99C : ASSET_ID_2B2;
 
         // Only send the most recent reading to Salesforce
-        local last = data.r.top();
         if (READING_LAT in last)   body[EVENT_NAME_LAT]      <- last[READING_LAT];
         if (READING_LNG in last)   body[EVENT_NAME_LNG]      <- last[READING_LNG];
         if (READING_TEMP in last)  body[EVENT_NAME_TEMP]     <- last[READING_TEMP];
