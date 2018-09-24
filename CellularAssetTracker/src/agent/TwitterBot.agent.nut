@@ -23,7 +23,7 @@ class TwitterBot {
         const CHARLIE_AUTH_TOKEN   = "@{TWITTER_CHARLIE_AUTH_TOKEN}";
         const CHARLIE_TOKEN_SECRET = "@{TWITTER_CHARLIE_TOKEN_SECRET}";
 
-        const MAP_LOCATION_URL     = "https://www.google.com/maps/@%s,%s";
+        const MAP_LOCATION_URL     = "https://maps.google.com/?q=%s,%s";
         const NO_LOCATION_FILLER   = "on Howard St."
 
         const ENTER_TWEET_1  = "#findcharlie is active!  Find me %s and tweet a picture with #ifoundcharlie to win a prize #DF18 #iot @electricimp @appirio. %s";

@@ -194,12 +194,14 @@ class TrackerApplication {
     }
 
     function _ledOnReqHandler(context) {
+        server.log("Turning LED's on.");
         _ledBlinkState = LED_BLINK_STATE.ON;
         _mm.send(MM_LED_STATE, _ledBlinkState);
         context.send(200, "Ok");
     }
 
     function _ledOffReqHandler(context) {
+        server.log("Turning LED's off.");
         _ledBlinkState = LED_BLINK_STATE.OFF;
         _mm.send(MM_LED_STATE, _ledBlinkState);
         context.send(200, "Ok");
@@ -214,8 +216,9 @@ class TrackerApplication {
                 state = state.tointeger();
             }
             _ledBlinkState = state;
+            server.log("LED Blink state: " + _ledBlinkState);
+            _mm.send(MM_LED_STATE, _ledBlinkState);
         }
-        _mm.send(MM_LED_STATE, _ledBlinkState);
     }
 }
 

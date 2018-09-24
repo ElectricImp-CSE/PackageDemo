@@ -91,8 +91,8 @@ class TrackerApplication {
     // Use to test GPS if we don't have the hardware
     static STUB_LOC_DATA = false;
     // Lat/lng for Specified locals
-    static LOC_LAT_IMP_HQ  = "37.3952484";
-    static LOC_LNG_IMP_HQ  = "-122.1034769";
+    static LOC_LAT_IMP_HQ  = "37.395447";
+    static LOC_LNG_IMP_HQ  = "-122.102142";
     static LOC_LAT_TB_BWAY = "37.795661";   // TB: Broadway
     static LOC_LNG_TB_BWAY = "-122.426654"; // TB
     static LOC_LAT_HOWARD  = "37.784599";   // TB: Howard Street
