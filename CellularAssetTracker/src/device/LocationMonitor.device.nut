@@ -11,6 +11,8 @@ class LocationMonitor {
     _distFromCtr  = null;
     _inBounds     = null;
 
+
+    // Configures GPS UART
     constructor(configurePixHawk) {
         // Configure class constants
         const GPS_BAUD_RATE    = 9600; // This is the default for ublox, but if it doesn't work try 38400
@@ -34,45 +36,24 @@ class LocationMonitor {
         }
 
         // Initialize GPS UART Driver
-        local gpsOpts = { "gspDataReady" : gpsHandler.bindenv(this),
+        local gpsOpts = { "gspDataReady" : _gpsHandler.bindenv(this),
                           "parseData"    : true,
                           "baudRate"     : GPS_BAUD_RATE };
         _gps = GPSUARTDriver(HAL.GPS_UART, gpsOpts);
     }
 
+    // Returns a table with the last reported "lat" and "lng" and the time when data was last updated "ts"
     function getLocation() {
         return {"lat" : _lastLat, "lng" : _lastLng, "ts" : _locCheckedAt};
     }
 
-    function gpsHandler(hasLoc, data) {
-        // server.log(data);
-        if (hasLoc) {
-            // print(data);
-            local lat = _gps.getLatitude();
-            local lng = _gps.getLongitude();
-
-            // Updated location if it has changed
-            if (locChanged(lat, lng) ) {
-                _lastLat = lat;
-                _lastLng = lng;
-            }
-            // Update location received timestamp
-            _locCheckedAt = time();
-
-            if ("sentenceId" in data && data.sentenceId == GPS_PARSER_GGA) {
-                calculateDistance(data);
-            }
-
-        } else if (!_gps.hasFix() && "numSatellites" in data) {
-            // This will log a ton - use to debug only, not in application
-            // server.log("GSV data received. Satellites: " + data.numSatellites);
-        }
-    }
-
+    // Returns boolean if geofencing is enabled and there is enough location data to
+    // calculate if device is inside designated area, otherwise returns null
     function inBounds() {
         return _inBounds;
     }
 
+    // Enables geofencing given lat and lng center point, distance and callback
     function enableGeofence(distance, ctrLat, ctrLng, cb) {
         _distFromCtr = distance;
         _geofenceCB = cb;
@@ -89,6 +70,7 @@ class LocationMonitor {
 
     }
 
+    // Disables geofencing
     function disableGeofence() {
         _geofenceCB = null;
         _gfCtr = null;
@@ -96,8 +78,36 @@ class LocationMonitor {
         _inBounds = null;
     }
 
-    // Use location threshold to filter out noise when not moving
-    function locChanged(lat, lng) {
+    // Handler to process incoming gps data from the GPSUARTDriver
+    // Updates the latest lat, lng and time values (returned by getLocation)
+    // If geofence is enabled checks if location geofencing
+    function _gpsHandler(hasLoc, data) {
+        // server.log(data);
+        if (hasLoc) {
+            // print(data);
+            local lat = _gps.getLatitude();
+            local lng = _gps.getLongitude();
+
+            // Updated location if it has changed
+            if (_locChanged(lat, lng) ) {
+                _lastLat = lat;
+                _lastLng = lng;
+            }
+            // Update location received timestamp
+            _locCheckedAt = time();
+
+            if ("sentenceId" in data && data.sentenceId == GPS_PARSER_GGA) {
+                _checkGeofence(data);
+            }
+
+        } else if (!_gps.hasFix() && "numSatellites" in data) {
+            // This will log a ton - use to debug only, not in application
+            // server.log("GSV data received. Satellites: " + data.numSatellites);
+        }
+    }
+
+    // Use location threshold to filter out noise when device is not moving
+    function _locChanged(lat, lng) {
         local changed = false;
 
         if (_lastLat == null || _lastLng == null) {
@@ -111,31 +121,45 @@ class LocationMonitor {
         return changed;
     }
 
-    function calculateDistance(data) {
-        // Only calculate if we have altitude, latitude and longitude
-        if (!("altitude" in data) || !("latitude" in data) || !("longitude" in data)) return;
+    // Check if newCart location data with altitude, latitude, and longitude is within geofence boundries, update inBounds state
+    // Trigger registered callback if device has just crossed boundry
+    function _checkGeofence(data) {
+        // Only calculate if geofence is enabled and we have altitude, latitude and longitude
+        if (_geofenceCB == null && (!("altitude" in data) || !("latitude" in data) || !("longitude" in data))) return;
 
+        local dist = _calculateDistance(data);
+
+        if (dist != null) {
+            // Check if we are inBounds
+            local inBounds = (dist <= _distFromCtr);
+
+            // Trigger callback if device has just crossed boundry
+            if (inBounds != _inBounds) {
+                _geofenceCB(inBounds);
+            }
+
+            // Track previous inBounds state, so we only trigger callback on a change
+            _inBounds = inBounds;
+        }
+    }
+
+    // Return distance from geofence center point if able to calculate
+    function _calculateDistance(data) {
         try {
             local lat = data.latitude.tofloat();
             local lng = data.longitude.tofloat();
             local alt = data.altitude.tofloat();
 
-            local new  = _getCartesianCoods(lat, lng, alt);
-            local dist = math.sqrt((new.x - _gfCtr.x)*(new.x - _gfCtr.x) + (new.y - _gfCtr.y)*(new.y - _gfCtr.y) + (new.z - _gfCtr.z)*(new.z - _gfCtr.z));
-
-            // server.log("New distance: " + dist + " M");
-            local inBounds = (dist <= _distFromCtr);
-            if (_geofenceCB != null && inBounds != _inBounds) {
-                _geofenceCB(inBounds);
-            }
-            // Track previous state, so we only trigger callback on a change
-            _inBounds = inBounds;
-        } catch (e) {
+            local newCart = _getCartesianCoods(lat, lng, alt);
+            return math.sqrt((newCart.x - _gfCtr.x)*(newCart.x - _gfCtr.x) + (newCart.y - _gfCtr.y)*(newCart.y - _gfCtr.y) + (newCart.z - _gfCtr.z)*(newCart.z - _gfCtr.z));
+        } catch(e) {
             // Couldn't calculate
             server.error("Error calculating distance: " + e);
+            return;
         }
     }
 
+    // Returns Cartesian Coordinates of given altitude, latitude, and longitude
     function _getCartesianCoods(lat, lng, alt) {
         local latRad = lat * PI / 180;
         local lngRad = lng * PI / 180;

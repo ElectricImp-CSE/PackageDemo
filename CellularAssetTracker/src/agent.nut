@@ -73,6 +73,14 @@ class TrackerApplication {
     function sendDataHandler(msg, reply) {
         server.log("Received data from device...");
         server.log(http.jsonencode(msg.data));
+
+        // Note this is not in every reading, just added each time data is sent, log to keep an eye on it
+        if (BATTERY in msg.data) {
+            local _battState = msg.data[BATTERY]
+            server.log("Remaining cell capacity: " + _battState[BATTERY_CAPACITY] + "mAh");
+            server.log("Percent of battery remaining: " + _battState[BATTERY_PERCENT] + "%");
+        }
+
         // Send data to webservice
         _webService.sendData(msg.data);
     }

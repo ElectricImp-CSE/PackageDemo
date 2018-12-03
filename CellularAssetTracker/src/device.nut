@@ -19,6 +19,10 @@
 // Library to help with asynchonous programming
 #require "promise.class.nut:3.0.1"
 
+// Add Battery Charger and Fuel Gauge libraries
+#require "BQ25895M.device.lib.nut:1.0.0"
+#require "MAX17055.device.lib.nut:1.0.1"
+
 #require "PrettyPrinter.class.nut:1.0.1"
 #require "JSONEncoder.class.nut:1.0.0"
 
@@ -38,6 +42,7 @@
 
 I2C_CLOCK_SPEED <- CLOCK_SPEED_400_KHZ;
 
+// Helper to print tables on device
 pp <- PrettyPrinter(null, false);
 print <- pp.print.bindenv(pp);
 
@@ -66,22 +71,39 @@ print <- pp.print.bindenv(pp);
 
 @include "device/LED.device.nut";
 
+// BATTERY MONITORING CLASS
+// ---------------------------------------------------
+// Class to manage Battery Charger and Fuel Gauge
+
+@include "device/BatteryMonitor.device.nut";
+
 // TRACKER APPLICATION CLASS
 // ---------------------------------------------------
 // Class to manage tracker application
 
+enum TRACKER_LOCATION {
+    EI_OFFICE,
+    HOWARD,
+    SF_TEST,
+    SC_CONVENTION
+}
+
 class TrackerApplication {
 
-    // Use to test GPS if we don't have the hardware
-    static STUB_LOC_DATA = false;
-    static STUB_LOC_LAT  = "37.395337";
-    static STUB_LOC_LNG  = "-122.102458";
+    // Geofence radius in meters
+    static GEOFENCE_RADIUS = 100;
 
     _mm              = null;
     _envMon          = null;
     _moveMon         = null;
     _locMon          = null;
+    _battMon         = null;
     _led             = null;
+
+    _stubLocLat      = null;
+    _stubLocLng      = null;
+    _geofenceLat     = null;
+    _geofenceLng     = null;
 
     _debug           = null;
     _reportingInt    = null;
@@ -99,14 +121,26 @@ class TrackerApplication {
         const READING_INTERVAL_SEC       = 30;
         // On reboot, give agent time send stored settings
         const AGENT_DEV_SYNC_TIMEOUT_SEC = 5;
+        // Time out used to determine is location data is stale
+        const LOCATION_TIMEOUT_SEC       = 60;
 
-        const TEMP_HIGH_ALERT_DESC            = "Temperature above threshold";
-        const TEMP_LOW_ALERT_DESC             = "Temperature below threshold";
-        const HUMID_HIGH_ALERT_DESC           = "Humidity above threshold";
-        const HUMID_LOW_ALERT_DESC            = "Humidity below threshold";
-        const MOVE_ALERT_DESC                 = "Movement detected";
-        const LIGHT_ALERT_DESC                = "Light level above threshold";
-        const LOCATION_ALERT_DESC             = "Device crossed geofence boundry";
+        const TEMP_HIGH_ALERT_DESC       = "Temperature above threshold";
+        const TEMP_LOW_ALERT_DESC        = "Temperature below threshold";
+        const HUMID_HIGH_ALERT_DESC      = "Humidity above threshold";
+        const HUMID_LOW_ALERT_DESC       = "Humidity below threshold";
+        const MOVE_ALERT_DESC            = "Movement detected";
+        const LIGHT_ALERT_DESC           = "Light level above threshold";
+        const LOCATION_ALERT_DESC        = "Device crossed geofence boundry";
+
+        // Lat/lng for Specified locals, use for geofence center points or to stub location
+        const LOC_LAT_IMP_HQ  = "37.395447";
+        const LOC_LNG_IMP_HQ  = "-122.102142";
+        const LOC_LAT_TB_BWAY = "37.795661";   // TB: Broadway
+        const LOC_LNG_TB_BWAY = "-122.426654"; // TB
+        const LOC_LAT_HOWARD  = "37.784599";   // TB: Howard Street
+        const LOC_LNG_HOWARD  = "-122.401007"; // TB
+        const LOC_LAT_SC_CONV = "37.4046706";
+        const LOC_LNG_SC_CONV = "-121.975247";
     }
 
     constructor(debug = false) {
@@ -134,6 +168,70 @@ class TrackerApplication {
         _mm.send(MM_GET_SETTINGS, null, settingsHandlers);
     }
 
+    function logNetInfo() {
+        local netData = imp.net.info();
+        if ("active" in netData) {
+            local type = netData.interface[netData.active].type;
+
+            // We have an active network connection
+            if (type == "cell") {
+                // The imp is on a cellular connection
+                server.log("cellular RSSI " + netData.interface[netData.active].rssi);
+                server.log("cellinfo " + netData.interface[netData.active].cellinfo);
+            }
+        }
+    }
+
+    // Set device location
+        // 1st parameter - Use location enum to Stub Location instead of using GPS data
+        // 2nd parameter - Use location enum to set geofence center
+    function setLocation(stubbedLocation, geofenceCtr) {
+        if (stubbedLocation != null) _setStubLocation(stubbedLocation);
+        if (geofenceCtr != null) _setGeoCenter(geofenceCtr);
+    }
+
+    function _setStubLocation(location) {
+        switch (location) {
+            case TRACKER_LOCATION.HOWARD:
+                _stubLocLat = LOC_LAT_HOWARD;
+                _stubLocLng = LOC_LNG_HOWARD;
+                break;
+            case TRACKER_LOCATION.SF_TEST:
+                _stubLocLat = LOC_LAT_TB_BWAY;
+                _stubLocLng = LOC_LNG_TB_BWAY;
+                break;
+            case TRACKER_LOCATION.EI_OFFICE:
+                _stubLocLat = LOC_LAT_IMP_HQ;
+                _stubLocLng = LOC_LNG_IMP_HQ;
+                break;
+            case TRACKER_LOCATION.SC_CONVENTION:
+                _stubLocLat = LOC_LAT_SC_CONV;
+                _stubLocLng = LOC_LNG_SC_CONV;
+                break;
+        }
+    }
+
+    function _setGeoCenter(location) {
+        switch (location) {
+            case TRACKER_LOCATION.HOWARD:
+                _geofenceLat = LOC_LAT_HOWARD;
+                _geofenceLng = LOC_LNG_HOWARD;
+                break;
+            case TRACKER_LOCATION.SF_TEST:
+                _geofenceLat = LOC_LAT_TB_BWAY;
+                _geofenceLng = LOC_LNG_TB_BWAY;
+                break;
+            case TRACKER_LOCATION.EI_OFFICE:
+                _geofenceLat = LOC_LAT_IMP_HQ;
+                _geofenceLng = LOC_LNG_IMP_HQ;
+                break;
+            case TRACKER_LOCATION.SC_CONVENTION:
+                _geofenceLat = LOC_LAT_SC_CONV;
+                _geofenceLng = LOC_LNG_SC_CONV;
+                break;
+        }
+    }
+
     // Start tracker application
     function run() {
         // Wait til we get settings from agent before starting readings loop
@@ -145,12 +243,15 @@ class TrackerApplication {
 
         // Start readings loop
         takeReadings();
+
         // Enable movement tracking
         _moveMon.setMovementHandler(movementHanlder.bindenv(this));
-        // TODO: Replace movement checker with configure interrupt to conserve power
         _moveMon.startMovementChecker();
-        // Enable geofencing half-a-mile~ish from stubed location
-        _locMon.enableGeofence(STUB_LOC_LAT, STUB_LOC_LNG, 800, geofenceAlertHandler.bindenv(this))
+
+        if (_geofenceLat != null) {
+            // Enable geofencing half-a-mile~ish from stubed location
+            _locMon.enableGeofence(_geofenceLat, _geofenceLng, 800, geofenceAlertHandler.bindenv(this));
+        }
     }
 
     function geofenceAlertHandler(inBounds) {
@@ -180,13 +281,22 @@ class TrackerApplication {
 
                 local reading = {};
                 reading[READING_TS] <- time();
+                // Flag used to determine if alerts should be sent
+                // Currently alerts are sent when the alert condition
+                // is first noted and when the alert condition is resolved.
+                // Alert info will remain in the alert table, will not be sent
+                // to the agent again. All alerts with resolved timestamps will
+                // be removed from the table after they are sent.
+                // Note: The full alert table is sent when any alert is created,
+                // so agent may need to track alerts if resending same alert to
+                // server is an issue.
                 local alertUpdate = false;
 
                 // Add location to stored
-                if (STUB_LOC_DATA) {
+                if (_stubLocLat != null && _stubLocLng != null) {
                     // Add stub location data
-                    reading[READING_LAT] <- STUB_LOC_LAT;
-                    reading[READING_LNG] <- STUB_LOC_LNG;
+                    reading[READING_LAT] <- _stubLocLat;
+                    reading[READING_LNG] <- _stubLocLng;
                 } else {
                     // Add location if GPS is reporting data
                     local loc = _locMon.getLocation();
@@ -255,23 +365,23 @@ class TrackerApplication {
                     reading[READING_LX] <- results[1].lxLevel;
                     reading[DEV_STATE_IS_LIGHT] <- results[1].isLight;
 
-                    // // Uncomment to report light level alerts
-                    // if (reading[DEV_STATE_IS_LIGHT] && !(ALERT_LIGHT in _alerts)) {
-                    //     // If light is above threshold trigger alert
-                    //     local alert = {};
-                    //     alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LIGHT;
-                    //     alert[ALERT_TRIGGER]     <- reading[READING_LX];
-                    //     alert[ALERT_CREATED]     <- reading[READING_TS];
-                    //     alert[ALERT_DESCRIPTION] <- LIGHT_ALERT_DESC;
-                    //     // Add alert to _alerts table
-                    //     _alerts[ALERT_LIGHT] <- alert;
-                    //     // Set connect flag to update stage change
-                    //     alertUpdate = true;
-                    // } else if (!reading[DEV_STATE_IS_LIGHT] && (ALERT_LIGHT in _alerts)) {
-                    //     // Clear light alert
-                    //     _alerts[ALERT_LIGHT][ALERT_RESOLVED] <- reading[READING_TS];
-                    //     alertUpdate = true;
-                    // }
+                    // Uncomment to report light level alerts
+                    if (reading[DEV_STATE_IS_LIGHT] && !(ALERT_LIGHT in _alerts)) {
+                        // If light is above threshold trigger alert
+                        local alert = {};
+                        alert[ALERT_TYPE]        <- ALERT_TYPE_ID.LIGHT;
+                        alert[ALERT_TRIGGER]     <- reading[READING_LX];
+                        alert[ALERT_CREATED]     <- reading[READING_TS];
+                        alert[ALERT_DESCRIPTION] <- LIGHT_ALERT_DESC;
+                        // Add alert to _alerts table
+                        _alerts[ALERT_LIGHT] <- alert;
+                        // Set connect flag to update stage change
+                        alertUpdate = true;
+                    } else if (!reading[DEV_STATE_IS_LIGHT] && (ALERT_LIGHT in _alerts)) {
+                        // Clear light alert
+                        _alerts[ALERT_LIGHT][ALERT_RESOLVED] <- reading[READING_TS];
+                        alertUpdate = true;
+                    }
 
                 }
 
@@ -281,20 +391,20 @@ class TrackerApplication {
                     reading[READING_MAG] <- magnitude;
                     reading[DEV_STATE_IS_MOVING] <- isMoving;
 
-                    // // Uncomment to report movement alerts
-                    // alertUpdate = true;
-                    // // Update alert table
-                    // if (isMoving && !(ALERT_MOVE in _alerts)) {
-                    //     local alert = {};
-                    //     alert[ALERT_TYPE]        <- ALERT_TYPE_ID.MOVE;
-                    //     alert[ALERT_TRIGGER]     <- magnitude;
-                    //     alert[ALERT_CREATED]     <- reading[READING_TS];
-                    //     alert[ALERT_DESCRIPTION] <- MOVE_ALERT_DESC;
-                    //     _alerts[ALERT_MOVE]      <- alert;
-                    // } else if (!isMoving && ALERT_MOVE in _alerts) {
-                    //     // Clear a movement alert
-                    //     _alerts[ALERT_MOVE][ALERT_RESOLVED] <- reading[READING_TS];
-                    // }
+                    // Uncomment to report movement alerts
+                    alertUpdate = true;
+                    // Update alert table
+                    if (isMoving && !(ALERT_MOVE in _alerts)) {
+                        local alert = {};
+                        alert[ALERT_TYPE]        <- ALERT_TYPE_ID.MOVE;
+                        alert[ALERT_TRIGGER]     <- magnitude;
+                        alert[ALERT_CREATED]     <- reading[READING_TS];
+                        alert[ALERT_DESCRIPTION] <- MOVE_ALERT_DESC;
+                        _alerts[ALERT_MOVE]      <- alert;
+                    } else if (!isMoving && ALERT_MOVE in _alerts) {
+                        // Clear a movement alert
+                        _alerts[ALERT_MOVE][ALERT_RESOLVED] <- reading[READING_TS];
+                    }
 
                 } else if (results[2] != null) {
                     // Update state with values from reading
@@ -348,10 +458,16 @@ class TrackerApplication {
         if (_data.len() > 0 && (alertUpdated || timeToConnect())) {
             msg = "Sending data.";
             local payload = {};
+
             // Always send readings
             payload[READINGS] <- _data;
             // Only send alert table if there has been an update to the alert
             payload[ALERTS]   <- (alertUpdated) ? _alerts : null;
+
+            // Send battery status
+            local bStatus = _battMon.getChargeStatus();
+            if (bStatus != null) payload[BATTERY] <- bStatus;
+
             // Send data, use ACK handler to delete sent data/alerts after delivery
             _mm.send(MM_SEND_DATA, payload, {"onAck" : sendReadingsAckHandler.bindenv(this)});
             // TODO: Add onFail to make sure we don't run out of memory if we aren't able to
@@ -411,6 +527,7 @@ class TrackerApplication {
         _envMon  = EnvMonitor();
         _moveMon = MovementMonitor();
         _locMon  = LocationMonitor(false);
+        _battMon = BatteryMonitor();
     }
 
     function updateSettings(settings) {
@@ -450,5 +567,15 @@ imp.enableblinkup(true);
 
 server.log("Starting Tracker application.");
 local debugLogging = true;
+
+// Initialize with geofence location and debug logging flag
 tracker <- TrackerApplication(debugLogging);
+
+// Stub location using EI office coordinates, disable geofencing
+tracker.setLocation(TRACKER_LOCATION.EI_OFFICE, null);
+
+// Log net info
+tracker.logNetInfo();
+
+// Start application
 tracker.run();

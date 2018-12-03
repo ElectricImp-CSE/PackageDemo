@@ -5,6 +5,7 @@ class MovementMonitor {
     _lastMag           = null;
     _movementCB        = null;
     _isMoving          = null;
+    _moveCheckTimer    = null;
 
     // Configure class constants
     function _statics_() {
@@ -49,15 +50,31 @@ class MovementMonitor {
         return math.sqrt(reading.x*reading.x + reading.y*reading.y + reading.z*reading.z);
     }
 
-    // To be used if interrupt is not configured to detect movement
     function startMovementChecker() {
+        // Check accel reading on an interval to determine if moving
+        _startMoveCheckLoop();
+        // TODO: replace with _enableInterrupt(true);
+
+    }
+
+    function stopMovementChecker() {
+        // Cancel next movement check
+        if (_moveCheckTimer != null) {
+            imp.cancelwakeup(_moveCheckTimer);
+            _moveCheckTimer = null;
+        }
+        // TODO: replace with _enableInterrupt(false);
+    }
+
+    // To be used if interrupt is not configured to detect movement
+    function _startMoveCheckLoop() {
         local movementCheckTime = STILL_CHECK_SEC;
         takeReading()
             .then(function(results) {
                 local msg = "No movement handler registered/accel data encountered an error, movement not checked.";
                 if (_movementCB != null && results.magnitude != null) {
                     // We have a reading update movement state
-                    _isMoving = checkMovement(results.magnitude);
+                    _isMoving = _checkMovement(results.magnitude);
                     // Current movement state is different than previous state
                     // Trigger alert callback
                     if (results.isMoving != _isMoving) {
@@ -79,14 +96,28 @@ class MovementMonitor {
                 // // This log is overwhelming, so leave commented out unless debugging!!!
                 // server.log(msg)
                 // Schedule the next check
-                imp.wakeup(movementCheckTime, startMovementChecker.bindenv(this));
+                if (_moveCheckTimer != null) {
+                    imp.cancelwakeup(_moveCheckTimer);
+                    _moveCheckTimer = null;
+                }
+                _moveCheckTimer = imp.wakeup(movementCheckTime, _startMoveCheckLoop.bindenv(this));
             }.bindenv(this));
     }
 
-    function enableInterrupt(enable) {
+    function _checkMovement(newMag) {
+        if (_lastMag == null) _lastMag = newMag;
+
+        local isMoving = (_lastMag > (newMag + _movementThresh) || _lastMag < (newMag - _movementThresh));
+        _lastMag = newMag;
+
+        return isMoving;
+    }
+
+    // Note: This is not working yet.
+    function _enableInterrupt(enable) {
         // Configure interrupt pin
         // HAL.ACCEL_INT.configure(DIGITAL_IN_WAKEUP, intHandler.bindenv(this)); // not a wake pin???
-        HAL.ACCEL_INT.configure(DIGITAL_IN, intHandler.bindenv(this));
+        HAL.ACCEL_INT.configure(DIGITAL_IN, _intHandler.bindenv(this));
         _accel.configureInterruptLatching(true);
         // TODO: configure interrupt to detect movemnt (this is not the way to do it!!)
         // Configure Accel interrupt
@@ -95,7 +126,7 @@ class MovementMonitor {
         _accel.getInterruptTable();
     }
 
-    function intHandler() {
+    function _intHandler() {
         local pinState = HAL.ACCEL_INT.read();
         // server.log("In intHandler: " + pinState);
         // TODO: Check this conditional works on wake from sleep
@@ -105,12 +136,4 @@ class MovementMonitor {
         if (_movementCB != null) _movementCB(MOVEMENT_ALERT);
     }
 
-    function checkMovement(newMag) {
-        if (_lastMag == null) _lastMag = newMag;
-
-        local isMoving = (_lastMag > (newMag + _movementThresh) || _lastMag < (newMag - _movementThresh));
-        _lastMag = newMag;
-
-        return isMoving;
-    }
 }
